@@ -16,16 +16,16 @@ const DOC_META: Record<
   { tagBg: string; tagText: string; tagLabel: string; title: string; subtitle: string; icon: IconName; iconColor: IconColor }
 > = {
   ocpb_complaint: {
-    tagBg: 'bg-primary-soft', tagText: 'text-primary', tagLabel: 'OCPB',
-    title: 'คำร้องเรียน สคบ.', subtitle: 'OCPB Formal Complaint Letter', icon: 'ClipboardList', iconColor: 'primary',
+    tagBg: 'bg-recover-soft', tagText: 'text-recover', tagLabel: 'OCPB',
+    title: 'คำร้องเรียน สคบ.', subtitle: 'OCPB Formal Complaint Letter', icon: 'ClipboardList', iconColor: 'recover',
   },
   deposit_demand: {
-    tagBg: 'bg-disputed-soft', tagText: 'text-disputed', tagLabel: 'DEMAND',
-    title: 'หนังสือทวงเงินประกัน', subtitle: 'Deposit Demand Letter to Landlord', icon: 'FileText', iconColor: 'disputed',
+    tagBg: 'bg-negotiate-soft', tagText: 'text-negotiate', tagLabel: 'DEMAND',
+    title: 'หนังสือทวงเงินประกัน', subtitle: 'Deposit Demand Letter to Landlord', icon: 'FileText', iconColor: 'negotiate',
   },
   evidence_summary: {
-    tagBg: 'bg-lawful-soft', tagText: 'text-lawful', tagLabel: 'EVIDENCE',
-    title: 'สรุปหลักฐานประกอบคำร้อง', subtitle: 'Evidence Summary Document', icon: 'FolderOpen', iconColor: 'lawful',
+    tagBg: 'bg-valid-soft', tagText: 'text-valid', tagLabel: 'EVIDENCE',
+    title: 'สรุปหลักฐานประกอบคำร้อง', subtitle: 'Evidence Summary Document', icon: 'FolderOpen', iconColor: 'valid',
   },
 };
 
@@ -98,8 +98,8 @@ export default function DocumentsScreen() {
       {loading && [0, 1, 2].map((i) => <SkeletonCard key={i} />)}
 
       {error && (
-        <View className="bg-unlawful-soft border border-unlawful rounded-lg p-4 mb-3">
-          <Body size="sm" className="text-unlawful">
+        <View className="bg-[#FDECEC] border border-[#F2C4C4] rounded-lg p-4 mb-3">
+          <Body size="sm" className="text-[#B42318]">
             {error}
           </Body>
         </View>
@@ -136,12 +136,12 @@ export default function DocumentsScreen() {
                   tapLight();
                   WebBrowser.openBrowserAsync(doc.download_url);
                 }}
-                className="bg-primary rounded-lg py-2 flex-row items-center justify-center gap-1"
+                className="bg-recover-soft border border-recover-border rounded-lg py-2 flex-row items-center justify-center gap-1"
                 activeOpacity={0.8}
               >
-                <Icon name="Download" size={18} color="white" />
-                <Body weight="semibold" size="sm" className="text-white">
-                  ดาวน์โหลด · Download
+                <Icon name="Download" size={18} color="recover" />
+                <Body weight="semibold" size="sm" className="text-recover">
+                  ดาวน์โหลด · Get
                 </Body>
               </TouchableOpacity>
             </Card>
@@ -178,11 +178,11 @@ export default function DocumentsScreen() {
           );
         })}
 
-      <View className="bg-primary-soft rounded-lg p-4 mb-6">
-        <Body weight="semibold" size="sm" className="text-primary mb-1">
+      <View className="bg-card border border-dashed border-cream-edge rounded-lg p-4 mb-6">
+        <Body weight="semibold" size="sm" className="text-ink mb-1">
           ขั้นตอนต่อไป · Next steps
         </Body>
-        <Body size="sm" className="text-primary-dark leading-5">
+        <Body size="sm" className="text-muted-2 leading-5">
           ส่งเอกสารยื่นให้ สคบ. ที่ ocpb.go.th หรือโทร 1166{'\n'}
           File documents with OCPB at ocpb.go.th or call 1166
         </Body>
@@ -196,7 +196,7 @@ export default function DocumentsScreen() {
         className="pb-8 flex-row items-center justify-center gap-1"
         activeOpacity={0.7}
       >
-        <Icon name="ArrowLeft" size={16} color="gray-400" />
+        <Icon name="ArrowLeft" size={16} color="faint" />
         <Body tone="muted" size="sm">
           เริ่มใหม่ · Start over
         </Body>

@@ -4,10 +4,10 @@
 import { Text, type TextProps } from 'react-native';
 
 const TONE = {
-  default: 'text-gray-800',
-  label: 'text-gray-600',
-  caption: 'text-gray-500',
-  muted: 'text-gray-400',
+  default: 'text-ink',
+  label: 'text-muted',
+  caption: 'text-muted-2',
+  muted: 'text-faint',
 } as const;
 
 const SIZE = { sm: 'text-sm', base: 'text-base' } as const;

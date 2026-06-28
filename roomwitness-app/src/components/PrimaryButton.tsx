@@ -17,6 +17,11 @@ export function PrimaryButton({
   return (
     <Pressable
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      className={`rounded-lg px-6 py-4 ${
+        disabled ? 'bg-gray-300' : 'bg-navy'
+      }`}
       onPress={() => {
         tapMedium();
         onPress();
@@ -25,10 +30,15 @@ export function PrimaryButton({
       onPressOut={disabled ? undefined : onPressOut}
     >
       <Animated.View
-        style={style}
-        className={`rounded-lg px-6 py-4 flex-row items-center justify-center gap-2 ${
-          disabled ? 'bg-gray-300' : 'bg-primary'
-        }`}
+        style={[
+          style,
+          {
+            alignItems: 'center',
+            flexDirection: 'row',
+            gap: 8,
+            justifyContent: 'center',
+          },
+        ]}
       >
         <Body weight="bold" className={disabled ? 'text-gray-500' : 'text-white'}>
           {title}

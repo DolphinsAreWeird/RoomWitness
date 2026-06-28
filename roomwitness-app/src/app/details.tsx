@@ -26,7 +26,9 @@ function RouteChip({
   const { style, onPressIn, onPressOut } = usePressScale(0.95);
   return (
     <Pressable
-      className="flex-1"
+      className={`flex-1 rounded-lg py-2 items-center border ${
+        active ? 'bg-navy border-navy' : 'bg-card border-card-border'
+      }`}
       onPress={() => {
         tapLight();
         onSelect();
@@ -34,13 +36,8 @@ function RouteChip({
       onPressIn={onPressIn}
       onPressOut={onPressOut}
     >
-      <Animated.View
-        style={style}
-        className={`rounded-lg py-2 items-center border ${
-          active ? 'bg-primary border-primary' : 'bg-white border-gray-200'
-        }`}
-      >
-        <Body size="sm" weight="semibold" className={active ? 'text-white' : 'text-gray-600'}>
+      <Animated.View style={style}>
+        <Body size="sm" weight="semibold" className={active ? 'text-white' : 'text-muted'}>
           {label}
         </Body>
       </Animated.View>
@@ -74,8 +71,8 @@ function Field({
         placeholder={placeholder}
         keyboardType={keyboardType}
         multiline={multiline}
-        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-gray-900 text-sm font-thai"
-        placeholderTextColor="#9CA3AF"
+        className="bg-card border border-card-border rounded-md px-3 py-2 text-ink text-sm font-thai"
+        placeholderTextColor="#9AA0AC"
         textAlignVertical={multiline ? 'top' : 'center'}
       />
     </View>
@@ -84,6 +81,7 @@ function Field({
 
 export default function DetailsScreen() {
   const setDocsDetails = useStore((s) => s.setDocsDetails);
+  const storeDeposit = useStore((s) => s.deposit);
 
   const [routing, setRouting] = useState<DocsDetails['routing']>('OCPB');
   // Tenant
@@ -100,7 +98,7 @@ export default function DetailsScreen() {
   const [propertyAddress, setPropertyAddress] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [deposit, setDeposit] = useState('');
+  const [deposit, setDeposit] = useState(storeDeposit > 0 ? String(storeDeposit) : '');
   const [rent, setRent] = useState('');
 
   function handleSubmit() {

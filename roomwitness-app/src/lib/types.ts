@@ -28,8 +28,10 @@ export interface LegalBasis {
   favors: 'TENANT' | 'LANDLORD';
 }
 
+export type Classification = 'LAWFUL' | 'DISPUTED' | 'UNLAWFUL';
+
 export interface Legal {
-  classification: 'LAWFUL' | 'DISPUTED' | 'UNLAWFUL';
+  classification: Classification;
   confidence: number;
   dimensions: Dimensions;
   legal_basis: LegalBasis[];

@@ -20,13 +20,13 @@ export function Section({
 }) {
   return (
     <View className={`mb-6 ${className}`}>
-      <Text className="font-thai text-gray-800 font-semibold mb-2">
+      <Text className="font-thai text-ink font-semibold mb-2">
         {title}
         {sub ? (
-          <Text className="font-thai font-normal text-xs text-gray-500">{`  ${sub}`}</Text>
+          <Text className="font-thai font-normal text-xs text-muted">{`  ${sub}`}</Text>
         ) : null}
         {!required ? (
-          <Text className="font-thai font-normal text-xs text-gray-400">{'  (ไม่บังคับ)'}</Text>
+          <Text className="font-thai font-normal text-xs text-faint">{'  (ไม่บังคับ)'}</Text>
         ) : null}
       </Text>
       {children}

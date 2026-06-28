@@ -1,8 +1,8 @@
 import '../global.css';
-import { BaiJamjuree_600SemiBold } from '@expo-google-fonts/bai-jamjuree';
+import '../nativewind-interop';
 import { IBMPlexMono_500Medium } from '@expo-google-fonts/ibm-plex-mono';
-import { Inter_400Regular } from '@expo-google-fonts/inter';
-import { NotoSansThai_400Regular } from '@expo-google-fonts/noto-sans-thai';
+import { IBMPlexSans_400Regular, IBMPlexSans_600SemiBold } from '@expo-google-fonts/ibm-plex-sans';
+import { IBMPlexSansThai_400Regular } from '@expo-google-fonts/ibm-plex-sans-thai';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -14,16 +14,16 @@ import { Text } from 'react-native';
 // just catches the strays. (NativeWind-styled Text already carries its own fontFamily.)
 const TextWithDefaults = Text as unknown as { defaultProps?: { style?: unknown } };
 TextWithDefaults.defaultProps = TextWithDefaults.defaultProps ?? {};
-TextWithDefaults.defaultProps.style = { fontFamily: 'NotoSansThai_400Regular' };
+TextWithDefaults.defaultProps.style = { fontFamily: 'IBMPlexSansThai_400Regular' };
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    BaiJamjuree_600SemiBold,
-    NotoSansThai_400Regular,
+    IBMPlexSans_400Regular,
+    IBMPlexSans_600SemiBold,
+    IBMPlexSansThai_400Regular,
     IBMPlexMono_500Medium,
-    Inter_400Regular,
   });
 
   useEffect(() => {
@@ -37,6 +37,7 @@ export default function RootLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="analyzing" />
       <Stack.Screen name="results" />
+      <Stack.Screen name="claim" />
       <Stack.Screen name="details" />
       <Stack.Screen name="documents" />
     </Stack>

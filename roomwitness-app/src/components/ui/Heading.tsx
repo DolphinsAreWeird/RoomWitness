@@ -18,13 +18,13 @@ export function Heading({
   return (
     <View>
       <Text
-        className={`font-display tracking-tight leading-tight text-gray-900 ${
+        className={`font-display tracking-tight leading-tight text-ink ${
           variant === 'hero' ? 'text-2xl' : 'text-xl'
         } ${className}`}
       >
         {children}
       </Text>
-      {sub ? <Text className="font-body text-base text-gray-600">{sub}</Text> : null}
+      {sub ? <Text className="font-body text-base text-muted-2">{sub}</Text> : null}
     </View>
   );
 }

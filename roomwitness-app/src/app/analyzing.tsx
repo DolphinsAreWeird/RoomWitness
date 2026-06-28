@@ -1,25 +1,37 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated from 'react-native-reanimated';
-import { Body, Icon, Screen } from '@/components/ui';
+import { Body, Icon } from '@/components/ui';
 import { checkPop, tapSuccess, tapWarn, useAnalyzingProgress, useSpin } from '@/theme/motion';
 import { analyze } from '@/lib/api';
 import { useStore } from '@/lib/store';
 
 const STEPS = [
-  { label: 'เปรียบเทียบภาพถ่าย · CV Analysis', desc: 'Agent 1' },
-  { label: 'ตรวจสอบหลักฐาน · Evidence', desc: 'Agent 2' },
-  { label: 'วิเคราะห์กฎหมาย · Legal RAG', desc: 'Agent 3' },
-  { label: 'สรุปผล · Done', desc: 'Agent 4' },
+  { label: 'Comparing your photos', th: 'เปรียบเทียบภาพก่อน–หลัง' },
+  { label: 'Reading your LINE chats', th: 'อ่านหลักฐานแชท LINE' },
+  { label: 'Checking Thai rental law', th: 'ตรวจสอบกฎหมายเช่าไทย' },
+  { label: 'Building your case', th: 'สรุปคดีของคุณ' },
 ];
+
+function Logo() {
+  return (
+    <View className="flex-row items-center gap-2">
+      <View className="w-7 h-7 rounded-md bg-white items-center justify-center">
+        <View className="w-2.5 h-2.5 rounded-sm border-2 border-navy" />
+      </View>
+      <Text className="font-display text-white text-base">RoomWitness</Text>
+    </View>
+  );
+}
 
 export default function AnalyzingScreen() {
   const form = useStore((s) => s.form);
   const setResult = useStore((s) => s.setResult);
   const [error, setError] = useState<string | null>(null);
   const spin = useSpin();
-  const { width, step, complete } = useAnalyzingProgress(STEPS.length);
+  const { step, complete } = useAnalyzingProgress(STEPS.length);
 
   useEffect(() => {
     if (!form) {
@@ -31,7 +43,7 @@ export default function AnalyzingScreen() {
       .then((data) => {
         if (cancelled) return;
         setResult(data);
-        tapSuccess(); // §2.5 — success on done
+        tapSuccess();
         complete(() => {
           if (!cancelled) router.replace('/results');
         });
@@ -39,7 +51,7 @@ export default function AnalyzingScreen() {
       .catch((err: Error) => {
         if (cancelled) return;
         setError(err.message || 'เกิดข้อผิดพลาด / Something went wrong');
-        tapWarn(); // §2.5 — warn on error
+        tapWarn();
       });
     return () => {
       cancelled = true;
@@ -48,108 +60,83 @@ export default function AnalyzingScreen() {
 
   if (error) {
     return (
-      <Screen step={2} label="วิเคราะห์ · Analyzing" scroll={false} bg="white">
-        <View className="flex-1 items-center justify-center">
-          <View className="bg-unlawful-soft border border-unlawful rounded-lg p-4 w-full mb-6">
-            <Body weight="semibold" className="text-unlawful text-center">
-              เกิดข้อผิดพลาด · Error
-            </Body>
-            <Body size="sm" className="text-unlawful text-center mt-1">
-              {error}
-            </Body>
-          </View>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="bg-gray-100 rounded-lg px-6 py-3 flex-row items-center gap-1"
-            activeOpacity={0.7}
-          >
-            <Icon name="ArrowLeft" size={18} color="gray-600" />
-            <Body weight="semibold" tone="label">
-              กลับ · Back
-            </Body>
-          </TouchableOpacity>
+      <SafeAreaView className="flex-1 bg-navy px-6 items-center justify-center">
+        <View className="bg-[#3A1B1B] border border-[#7A3B3B] rounded-lg p-4 w-full mb-6">
+          <Text className="font-display text-[#FF9B9B] text-center">เกิดข้อผิดพลาด · Error</Text>
+          <Text className="font-thai text-[#FF9B9B] text-center text-sm mt-1">{error}</Text>
         </View>
-      </Screen>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="bg-white/10 rounded-lg px-6 py-3 flex-row items-center gap-1"
+          activeOpacity={0.7}
+        >
+          <Icon name="ArrowLeft" size={18} color="white" />
+          <Text className="font-thai text-white font-semibold">กลับ · Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
     );
   }
 
   return (
-    <Screen step={2} label="วิเคราะห์ · Analyzing" scroll={false} bg="white">
-      <View className="flex-1 items-center justify-center">
-        <View className="mb-6 items-center">
-          <Animated.View style={spin}>
-            <Icon name="Loader" size={40} color="primary" />
-          </Animated.View>
-        </View>
-        <Body weight="bold" className="font-display text-xl text-gray-900 text-center mb-1">
-          กำลังวิเคราะห์...
-        </Body>
-        <Body tone="caption" size="sm" className="text-center mb-6">
-          Analyzing your evidence
-        </Body>
+    <SafeAreaView className="flex-1 bg-navy">
+      <View className="flex-1 px-6 pt-6 pb-10">
+        <Logo />
 
-        {/* Estimated progress bar (honest — see useAnalyzingProgress) */}
-        <View className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-8">
-          <Animated.View style={width} className="h-2 bg-primary rounded-full" />
-        </View>
+        <View className="flex-1 justify-center">
+          <Text className="font-display text-[#8FA0BC] text-xs uppercase tracking-wide mb-1">
+            Analyzing
+          </Text>
+          <Text className="font-display text-white text-2xl leading-8 mb-8">
+            Building your case{'\n'}กำลังตรวจสอบคดีของคุณ
+          </Text>
 
-        <View className="w-full gap-3">
-          {STEPS.map((s, i) => {
-            const done = i < step;
-            const active = i === step;
-            return (
-              <View
-                key={i}
-                className={`flex-row items-center gap-3 p-3 rounded-lg border ${
-                  done
-                    ? 'bg-lawful-soft border-lawful'
-                    : active
-                    ? 'bg-primary-soft border-primary'
-                    : 'bg-gray-50 border-gray-200'
-                }`}
-              >
-                {done ? (
-                  <Animated.View entering={checkPop}>
-                    <Icon name="Check" size={20} color="lawful" />
-                  </Animated.View>
-                ) : (
-                  <Icon
-                    name={active ? 'CircleDot' : 'Circle'}
-                    size={20}
-                    color={active ? 'primary' : 'gray-400'}
-                  />
-                )}
-                <View className="flex-1">
-                  <Body
-                    weight="semibold"
-                    size="sm"
-                    className={done ? 'text-lawful' : active ? 'text-primary' : 'text-gray-400'}
+          <View>
+            {STEPS.map((s, i) => {
+              const done = i < step;
+              const active = i === step;
+              return (
+                <View key={i} className="flex-row items-center gap-3.5 py-3">
+                  <View
+                    className="w-8 h-8 rounded-full items-center justify-center border"
+                    style={{
+                      backgroundColor: done
+                        ? 'rgba(123,224,168,0.12)'
+                        : active
+                        ? 'rgba(255,255,255,0.10)'
+                        : 'transparent',
+                      borderColor: done
+                        ? 'rgba(123,224,168,0.45)'
+                        : active
+                        ? 'rgba(255,255,255,0.5)'
+                        : 'rgba(255,255,255,0.16)',
+                    }}
                   >
-                    {s.label}
-                  </Body>
-                  <Body tone="muted" size="sm" className="text-xs">
-                    {s.desc}
-                  </Body>
+                    {done ? (
+                      <Animated.View entering={checkPop}>
+                        <Text className="text-[#7BE0A8] font-bold text-sm">✓</Text>
+                      </Animated.View>
+                    ) : active ? (
+                      <Animated.View style={spin}>
+                        <Icon name="Loader" size={16} color="white" />
+                      </Animated.View>
+                    ) : (
+                      <Text className="font-display text-[#5B6B86] text-xs">{i + 1}</Text>
+                    )}
+                  </View>
+                  <View style={{ opacity: active || done ? 1 : 0.4 }}>
+                    <Text className="font-display text-white text-sm">{s.label}</Text>
+                    <Text className="font-thai text-[#8FA0BC] text-xs mt-0.5">{s.th}</Text>
+                  </View>
                 </View>
-                {done && (
-                  <Body weight="bold" size="sm" className="text-lawful">
-                    เสร็จแล้ว
-                  </Body>
-                )}
-                {active && (
-                  <Body weight="bold" size="sm" className="text-primary">
-                    กำลังทำ...
-                  </Body>
-                )}
-              </View>
-            );
-          })}
+              );
+            })}
+          </View>
         </View>
 
-        <Body tone="muted" size="sm" className="text-xs text-center mt-8">
-          มักใช้เวลา 1–2 นาที · usually 1–2 min
+        <Body className="text-[#6B7A95] text-xs text-center">
+          CCC · OCPB 2568 · Consumer Protection Act
         </Body>
       </View>
-    </Screen>
+    </SafeAreaView>
   );
 }

@@ -16,10 +16,13 @@ function emptyRow(): ClaimRow {
   return { id: nextId++, item: '', description: '', amount_thb: 0 };
 }
 
-const INPUT = 'bg-white border border-gray-200 rounded-md px-3 py-2 text-gray-900 text-sm font-thai';
+const INPUT = 'bg-card border border-card-border rounded-md px-3 py-2 text-ink text-sm font-thai';
+const MULTILINE = 'bg-card border border-card-border rounded-lg px-3 py-2 text-ink text-sm font-thai';
 
 export default function UploadScreen() {
   const setForm = useStore((s) => s.setForm);
+  const deposit = useStore((s) => s.deposit);
+  const setDeposit = useStore((s) => s.setDeposit);
   const [claims, setClaims] = useState<ClaimRow[]>([emptyRow()]);
   const [moveInUri, setMoveInUri] = useState<string>();
   const [moveOutUri, setMoveOutUri] = useState<string>();
@@ -70,12 +73,30 @@ export default function UploadScreen() {
   const hasValidClaim = claims.some((c) => c.item.trim().length > 0);
 
   return (
-    <Screen step={1} label="อัปโหลด · Upload" bg="white">
+    <Screen step={1} label="อัปโหลด · Upload">
       {/* Hero */}
       <View className="py-4">
-        <Heading variant="hero" sub="Reclaim your deposit">
+        <Heading variant="hero" sub="Get your deposit back.">
           ทวงเงินประกันคืน
         </Heading>
+      </View>
+
+      {/* Deposit — illustrative client-side figure (never sent to backend) */}
+      <View className="bg-card border border-card-border rounded-lg p-4 mb-4 flex-row items-center justify-between">
+        <Body tone="label" size="sm" weight="semibold" className="text-xs">
+          เงินประกัน · Your deposit
+        </Body>
+        <View className="flex-row items-baseline">
+          <Body weight="bold" className="font-display text-xl text-ink">฿</Body>
+          <TextInput
+            value={deposit > 0 ? String(deposit) : ''}
+            onChangeText={(t) => setDeposit(Number(t.replace(/[^0-9]/g, '')) || 0)}
+            keyboardType="numeric"
+            className="font-display text-xl text-ink min-w-[90px] text-right p-0"
+            placeholder="20000"
+            placeholderTextColor="#9AA0AC"
+          />
+        </View>
       </View>
 
       {/* Claims */}
@@ -90,7 +111,7 @@ export default function UploadScreen() {
             layout={layout}
             entering={cardEnter(0)}
             exiting={fadeOut}
-            className="bg-gray-50 rounded-lg p-3 mb-3"
+            className="bg-card border border-card-border rounded-lg p-3 mb-3"
           >
             <View className="flex-row items-center justify-between mb-2">
               <Body tone="caption" size="sm" weight="semibold" className="text-xs">
@@ -98,7 +119,7 @@ export default function UploadScreen() {
               </Body>
               {claims.length > 1 && (
                 <TouchableOpacity onPress={() => removeClaim(claim.id)} hitSlop={8}>
-                  <Icon name="X" size={18} color="gray-400" />
+                  <Icon name="X" size={18} color="faint" />
                 </TouchableOpacity>
               )}
             </View>
@@ -129,11 +150,11 @@ export default function UploadScreen() {
 
         <TouchableOpacity
           onPress={addClaim}
-          className="border border-dashed border-primary rounded-lg py-3 flex-row items-center justify-center gap-1"
+          className="border border-dashed border-navy rounded-lg py-3 flex-row items-center justify-center gap-1"
           activeOpacity={0.7}
         >
-          <Icon name="Plus" size={18} color="primary" />
-          <Body weight="semibold" size="sm" className="text-primary">
+          <Icon name="Plus" size={18} color="navy" />
+          <Body weight="semibold" size="sm" className="text-navy">
             เพิ่มรายการ · Add item
           </Body>
         </TouchableOpacity>
@@ -191,9 +212,9 @@ export default function UploadScreen() {
         activeOpacity={0.7}
       >
         <Animated.View style={optChevron}>
-          <Icon name="ChevronDown" size={18} color="primary" />
+          <Icon name="ChevronDown" size={18} color="navy" />
         </Animated.View>
-        <Body weight="semibold" size="sm" className="text-primary">
+        <Body weight="semibold" size="sm" className="text-navy">
           ข้อความเพิ่มเติม · More details (optional)
         </Body>
       </TouchableOpacity>
@@ -210,7 +231,7 @@ export default function UploadScreen() {
               onChangeText={setContractClause}
               multiline
               numberOfLines={3}
-              className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-900 text-sm font-thai"
+              className={MULTILINE}
               placeholderTextColor="#9CA3AF"
               textAlignVertical="top"
             />
@@ -225,7 +246,7 @@ export default function UploadScreen() {
               onChangeText={setLandlordPromises}
               multiline
               numberOfLines={3}
-              className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-900 text-sm font-thai"
+              className={MULTILINE}
               placeholderTextColor="#9CA3AF"
               textAlignVertical="top"
             />
@@ -240,7 +261,7 @@ export default function UploadScreen() {
               onChangeText={setTenantPromises}
               multiline
               numberOfLines={3}
-              className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-900 text-sm font-thai"
+              className={MULTILINE}
               placeholderTextColor="#9CA3AF"
               textAlignVertical="top"
             />

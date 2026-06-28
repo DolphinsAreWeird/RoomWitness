@@ -6,29 +6,35 @@ import Animated from 'react-native-reanimated';
 import { ClaimCard } from '@/components/ClaimCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Body, Card, Icon, Screen } from '@/components/ui';
-import { bannerEnter, cardEnter, tapSuccess, useCountUp, useFillBar } from '@/theme/motion';
+import { cardEnter, tapSuccess, useCountUp } from '@/theme/motion';
+import { toneFor } from '@/lib/verdict';
 import { useStore } from '@/lib/store';
+import type { Classification } from '@/lib/types';
 
 export default function ResultsScreen() {
   const result = useStore((s) => s.result);
+  const deposit = useStore((s) => s.deposit);
 
-  // Client-side recoverable estimate — UNLAWFUL + DISPUTED amounts only (see CLAUDE.md note).
-  const recoverableTotal =
+  // Bucket the deducted ฿ by verdict tone (color = good-for-tenant, see lib/verdict.ts).
+  const sumBy = (cls: Classification) =>
     result?.claims
-      .filter((c) => c.legal.classification !== 'LAWFUL')
-      .reduce((sum, c) => sum + c.claim.amount_thb, 0) ?? 0;
-  const totalCharged = result?.claims.reduce((sum, c) => sum + c.claim.amount_thb, 0) ?? 0;
+      .filter((c) => c.legal.classification === cls)
+      .reduce((s, c) => s + c.claim.amount_thb, 0) ?? 0;
+  const recoverSum = sumBy('UNLAWFUL');
+  const negotiateSum = sumBy('DISPUTED');
+  const validSum = sumBy('LAWFUL');
+  const totalCharged = recoverSum + negotiateSum + validSum;
+  // Client-side recoverable estimate — UNLAWFUL + DISPUTED only (CLAUDE.md note).
+  const recoverableTotal = recoverSum + negotiateSum;
 
-  // §2.5 — recoverable ฿ count-up + fill bar; banner success buzz when there's money to claim.
   const recovered = useCountUp(recoverableTotal);
-  const fillStyle = useFillBar(totalCharged > 0 ? recoverableTotal / totalCharged : 0);
   useEffect(() => {
     if (recoverableTotal > 0) tapSuccess();
   }, [recoverableTotal]);
 
   if (!result) {
     return (
-      <SafeAreaView className="flex-1 bg-white items-center justify-center px-6">
+      <SafeAreaView className="flex-1 bg-cream items-center justify-center px-6">
         <Body tone="caption" className="text-center">
           ไม่พบผลลัพธ์ · No results
         </Body>
@@ -37,8 +43,8 @@ export default function ResultsScreen() {
           className="mt-4 flex-row items-center gap-1"
           activeOpacity={0.7}
         >
-          <Icon name="ArrowLeft" size={16} color="primary" />
-          <Body className="text-primary" weight="semibold">
+          <Icon name="ArrowLeft" size={16} color="ink" />
+          <Body className="text-ink" weight="semibold">
             กลับหน้าแรก
           </Body>
         </TouchableOpacity>
@@ -46,90 +52,92 @@ export default function ResultsScreen() {
     );
   }
 
-  const unlawfulCount = result.claims.filter((c) => c.legal.classification === 'UNLAWFUL').length;
-  const disputedCount = result.claims.filter((c) => c.legal.classification === 'DISPUTED').length;
+  const seg = (amount: number, color: string) =>
+    amount > 0 ? <View style={{ flex: amount, backgroundColor: color }} /> : null;
 
-  const bannerClass =
-    unlawfulCount > 0
-      ? 'bg-unlawful-soft border-unlawful'
-      : disputedCount > 0
-      ? 'bg-disputed-soft border-disputed'
-      : 'bg-lawful-soft border-lawful';
-  const bannerTextClass =
-    unlawfulCount > 0 ? 'text-unlawful' : disputedCount > 0 ? 'text-disputed' : 'text-lawful';
-  const bannerLabel =
-    unlawfulCount > 0
-      ? `${unlawfulCount} รายการผิดกฎหมาย · Unlawful`
-      : disputedCount > 0
-      ? `${disputedCount} รายการโต้แย้งได้ · Disputed`
-      : 'ทุกรายการถูกกฎหมาย · All lawful';
+  const legendItem = (label: string, amount: number, color: string) =>
+    amount > 0 ? (
+      <View className="flex-row items-center gap-1.5">
+        <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: color }} />
+        <Body tone="caption" className="text-xs">
+          {label} ฿{amount.toLocaleString()}
+        </Body>
+      </View>
+    ) : null;
 
   return (
-    <Screen step={3} label="ผลลัพธ์ · Results">
-      {/* Verdict banner — fade + scale in */}
-      <Animated.View
-        entering={bannerEnter}
-        className={`rounded-lg border p-4 mb-4 ${bannerClass}`}
-      >
-        <Body weight="bold" className={bannerTextClass}>
-          ผลการวิเคราะห์
+    <Screen>
+      {/* Header: back + case id */}
+      <View className="flex-row items-center pt-2 mb-5">
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="flex-row items-center gap-1"
+          activeOpacity={0.7}
+        >
+          <Icon name="ArrowLeft" size={16} color="muted" />
+          <Body tone="caption" size="sm">
+            กลับ · Back
+          </Body>
+        </TouchableOpacity>
+        <Body tone="caption" size="sm" className="ml-auto text-xs">
+          Case RW-0001
         </Body>
-        <Body size="sm" className={bannerTextClass}>
-          {bannerLabel}
-        </Body>
-      </Animated.View>
+      </View>
 
-      {/* Recoverable estimate — the pitch moment: big green count-up + fill bar */}
-      <Card className="mb-4">
-        <View className="flex-row items-center justify-between mb-1">
-          <Body tone="label" weight="semibold">
-            ยอดที่อาจคืนได้
-          </Body>
-          <View className="bg-disputed-soft px-2 py-0.5 rounded-sm">
-            <Body tone="default" size="sm" weight="semibold" className="text-disputed text-xs">
-              ประมาณการ / estimate
-            </Body>
-          </View>
-        </View>
-        <Body className="font-display text-3xl text-lawful">
-          ฿{recovered.toLocaleString()}{' '}
-          <Body className="font-body text-base text-gray-400">
-            / ฿{totalCharged.toLocaleString()}
-          </Body>
+      {/* Hero: recoverable count-up + segmented bar */}
+      <Card className="rounded-xl mb-5">
+        <Body tone="caption" size="sm" className="mb-1">
+          เรียกคืนได้ · You could recover
         </Body>
-        {/* Fill bar: recoverable / totalCharged, animated to width over 400ms */}
-        <View className="h-2 bg-gray-200 rounded-full overflow-hidden mt-3">
-          <Animated.View style={fillStyle} className="h-2 bg-lawful rounded-full" />
+        <Body className="font-display text-5xl tracking-tight text-recover leading-none">
+          ฿{recovered.toLocaleString()}
+        </Body>
+        <Body tone="caption" size="sm" className="mt-2">
+          จาก ฿{totalCharged.toLocaleString()} ที่ถูกหัก · of ฿{totalCharged.toLocaleString()}{' '}
+          deducted from your ฿{deposit.toLocaleString()} deposit
+        </Body>
+
+        {/* Segmented bar: recover / negotiate / valid proportional to ฿ */}
+        <View className="flex-row h-3 rounded-md overflow-hidden mt-4 gap-0.5">
+          {seg(recoverSum, '#1C7A4B')}
+          {seg(negotiateSum, '#C99A2E')}
+          {seg(validSum, '#9AA0AC')}
         </View>
-        <Body tone="muted" size="sm" className="text-xs mt-2">
-          * คำนวณจากรายการ UNLAWFUL + DISPUTED เท่านั้น ไม่ใช่ตัวเลขจากระบบ
+        <View className="flex-row flex-wrap gap-x-4 gap-y-1 mt-3">
+          {legendItem('Recover', recoverSum, '#1C7A4B')}
+          {legendItem('Negotiate', negotiateSum, '#C99A2E')}
+          {legendItem('Valid', validSum, '#9AA0AC')}
+        </View>
+
+        <Body tone="muted" size="sm" className="text-xs mt-3">
+          * ประมาณการจากรายการ UNLAWFUL + DISPUTED ไม่ใช่ตัวเลขจากระบบ · estimate
         </Body>
       </Card>
 
       {/* Evidence pills */}
       {result.evidence_summary && (
-        <View className="mb-4">
+        <View className="mb-5">
           <Body tone="label" weight="semibold" className="mb-2">
             หลักฐานที่พบ · Evidence found
           </Body>
           <View className="flex-row flex-wrap gap-2">
             {result.evidence_summary.platforms.map((p, i) => (
-              <View key={i} className="bg-primary-soft rounded-sm px-2 py-1">
-                <Body className="text-primary text-xs" weight="semibold">
+              <View key={i} className="bg-recover-soft rounded-sm px-2 py-1">
+                <Body className="text-recover text-xs" weight="semibold">
                   {p}
                 </Body>
               </View>
             ))}
             {result.evidence_summary.landlord_promises.map((p, i) => (
-              <View key={`lp${i}`} className="bg-gray-100 rounded-sm px-2 py-1 max-w-[200px]">
+              <View key={`lp${i}`} className="bg-valid-soft rounded-sm px-2 py-1 max-w-[220px]">
                 <Body tone="label" className="text-xs" numberOfLines={1}>
                   {p}
                 </Body>
               </View>
             ))}
             {result.evidence_summary.deposit_mentions.map((d, i) => (
-              <View key={`dm${i}`} className="bg-disputed-soft rounded-sm px-2 py-1 max-w-[200px]">
-                <Body className="text-disputed text-xs" numberOfLines={1}>
+              <View key={`dm${i}`} className="bg-negotiate-soft rounded-sm px-2 py-1 max-w-[220px]">
+                <Body className="text-negotiate text-xs" numberOfLines={1}>
                   {d}
                 </Body>
               </View>
@@ -138,18 +146,21 @@ export default function ResultsScreen() {
         </View>
       )}
 
-      {/* Claim cards — stagger in */}
-      <Body tone="label" weight="semibold" className="mb-3">
-        รายการทั้งหมด · All claims
+      {/* Per-claim verdict cards → tap into detail */}
+      <Body tone="label" weight="semibold" className="mb-3 uppercase text-xs tracking-wide">
+        คำตัดสินรายรายการ · The verdict on each charge
       </Body>
       {result.claims.map((item, i) => (
         <Animated.View key={i} entering={cardEnter(i)}>
-          <ClaimCard item={item} />
+          <ClaimCard item={item} index={i} />
         </Animated.View>
       ))}
 
       <View className="pb-8 mt-2">
-        <PrimaryButton title="เอกสาร / Documents" onPress={() => router.push('/details')} />
+        <PrimaryButton
+          title="สร้างเอกสารกฎหมาย · Generate documents"
+          onPress={() => router.push('/details')}
+        />
       </View>
     </Screen>
   );

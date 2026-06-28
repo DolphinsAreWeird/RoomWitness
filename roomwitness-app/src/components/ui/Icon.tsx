@@ -41,12 +41,14 @@ export type IconName = keyof typeof ICONS;
 
 // §1 token keys → hex. RN SVG can't read Tailwind classes, so resolve here.
 const COLORS = {
-  primary: '#0062FF',
-  'primary-dark': '#0047B3',
-  lawful: '#16A34A',
-  disputed: '#D97706',
-  unlawful: '#DC2626',
-  'surface-navy': '#0B1F3A',
+  ink: '#16243D',
+  navy: '#101D33',
+  muted: '#6B7283',
+  'muted-2': '#5A6271',
+  faint: '#9AA0AC',
+  recover: '#1C7A4B',
+  negotiate: '#A9750F',
+  valid: '#5A6271',
   white: '#FFFFFF',
   'gray-900': '#111827',
   'gray-800': '#1F2937',

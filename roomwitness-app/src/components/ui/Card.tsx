@@ -15,7 +15,7 @@ export function Card({
   return (
     <View
       style={[cardShadow, style]}
-      className={`bg-white rounded-lg border border-gray-200 ${padded ? 'p-4' : ''} ${className}`}
+      className={`bg-card rounded-lg border border-card-border ${padded ? 'p-4' : ''} ${className}`}
       {...rest}
     >
       {children}

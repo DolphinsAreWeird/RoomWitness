@@ -11,16 +11,16 @@ export function Screen({
   step,
   label,
   scroll = true,
-  bg = 'gray',
+  bg = 'cream',
   children,
 }: {
   step?: 1 | 2 | 3 | 4 | 5;
   label?: string;
   scroll?: boolean;
-  bg?: 'white' | 'gray';
+  bg?: 'white' | 'cream' | 'navy';
   children: ReactNode;
 }) {
-  const bgClass = bg === 'white' ? 'bg-white' : 'bg-gray-50';
+  const bgClass = bg === 'white' ? 'bg-card' : bg === 'navy' ? 'bg-navy' : 'bg-cream';
   return (
     <SafeAreaView className={`flex-1 ${bgClass}`}>
       {step != null && label != null ? <NavHeader step={step} label={label} /> : null}

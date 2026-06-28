@@ -5,6 +5,8 @@
   "dependencies": {
     "@expo-google-fonts/bai-jamjuree": "^0.4.1",
     "@expo-google-fonts/ibm-plex-mono": "^0.4.1",
+    "@expo-google-fonts/ibm-plex-sans": "^0.4.1",
+    "@expo-google-fonts/ibm-plex-sans-thai": "^0.4.1",
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/noto-sans-thai": "^0.4.2",
     "expo": "~54.0.0",

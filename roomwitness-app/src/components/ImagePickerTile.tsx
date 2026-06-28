@@ -38,7 +38,7 @@ export function ImagePickerTile({
   return (
     <TouchableOpacity
       onPress={pick}
-      className="border border-gray-200 rounded-lg p-4 items-center justify-center min-h-[100px] bg-gray-50"
+      className="border border-card-border rounded-lg p-4 items-center justify-center min-h-[100px] bg-card"
       activeOpacity={0.7}
     >
       {uri ? (
@@ -46,7 +46,7 @@ export function ImagePickerTile({
       ) : (
         <>
           <View className="mb-1">
-            <Icon name="Camera" color="gray-500" />
+            <Icon name="Camera" color="muted" />
           </View>
           <Body size="sm" weight="semibold" className="text-center">
             {label}
