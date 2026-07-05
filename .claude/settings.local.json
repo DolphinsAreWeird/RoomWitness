@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -X POST http://localhost:3000/run/agent03 -H 'Content-Type: application/json' -d '{\"claims\":[{\"claim_id\":\"C001\",\"item\":\"wall\",\"description\":\"scuff\",\"amount_thb\":2000}],\"damage_map\":[],\"has_void_clause\":false}')"
+    ]
+  }
+}
