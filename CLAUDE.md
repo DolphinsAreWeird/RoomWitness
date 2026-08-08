@@ -5,6 +5,31 @@ Renter uploads move-in photos, move-out photos, and the lease; the system return
 ready-to-file Thai legal documents (OCPB complaint, deposit demand letter, evidence
 summary). BDI Bangkok Hackathon 2026. Team: KP (lead), Beam (frontend + pitch), Tuey (tech).
 
+## Implementation Status
+
+Audited 2026-08-08. Everything below is real (live LLM/RAG calls), not mocked, unless noted.
+
+| Component | Status | Notes |
+|---|---|---|
+| express-backend (all routes) | FULL | Stateless proxy/orchestrator to the 4 agent services; no DB (by design). `/full-analysis` correctly maps agent01→02→03 outputs. |
+| roomwitness-app (mobile) | FULL | Real multipart calls in `lib/api.ts`; `.env` has `EXPO_PUBLIC_USE_MOCK=false` pointing at an ngrok tunnel (likely stale — repoint before next demo). Falls back to `fixtures.ts` mocks only if `USE_MOCK` unset. |
+| nextjs-frontend | FULL | Calls express-backend per-agent routes directly (not `/full-analysis`); `next.config.js` rewrites proxy to `BACKEND_URL`. |
+| Agent 01 CV (`roomwitness-rag/services/agent01_service.py`) | FULL | Real Groq Llama-4-Scout vision calls comparing move-in/move-out photos. |
+| Agent 02 Contract Parser (`.../services/agent02_service.py`) | FULL | Real pdfplumber extraction + Typhoon v2 (LangChain) parsing + Groq screenshot OCR for chat evidence. |
+| Agent 03 Legal Reasoning (`.../services/agent03_service.py`) | FULL | Real hard-rule engine + ChromaDB RAG retrieval (corpus is seeded, ~1MB) + Typhoon v2 per-claim reasoning. |
+| Agent 04 Doc Generator (`.../services/agent04_service.py`) | FULL | Real Typhoon v2 narrative generation + ReportLab/Platypus PDF rendering (Thai font) + local-disk storage + working download route. |
+| `GROQ_API_KEY` / `TYPHOON_API_KEY` | SET | Real keys present in `roomwitness-rag/.env`. |
+| AWS S3 (`shared/s3_client.py`, `agent0X_*/uploader.py`) | UNUSED | Placeholder creds; agents run in local-disk "demo mode" instead. Kept for future use per README. |
+| `agent01_cv/main.py`, `agent02_contract_parser/main.py`, `agent03_legal_reasoning/main.py`, `agent04_doc_generator/main.py` | STUBBED/DEAD | Alternate standalone FastAPI apps for an S3-URL-based Agent01Input/Agent02Input/Agent03Input contract that does **not** match what express-backend sends. Not run by anything (README only runs `services.agentXX_service`). `agent01_cv/main.py` also has a live bug — calls `assess_claim(move_in_b64=…)` but `cv.py` defines `assess_claim(move_in_b64s: list[str], …)`. Safe to ignore or delete. |
+| `roomwitness-vlm/` | DEAD | Empty except `__pycache__` — CV/evidence agents were moved into `roomwitness-rag/agent01_cv/`. Directory + all references below (and in README pipeline diagrams elsewhere) are stale. |
+| `roomwitness-rag/portal/` | DEAD | Only a leftover `chroma_db/`; `portal/app.py` referenced later in this file no longer exists. |
+
+The rest of this file (below) describes an **older architecture** (`portal/app.py`,
+`rag_agent.py`, `roomwitness-vlm/agent01_cv.py`) that has since been replaced by
+`roomwitness-rag/services/agentXX_service.py` + `roomwitness-rag/agent0X_*/`. Trust
+`README.md`'s Quick Start and the table above over the sections below; they're kept
+for historical data-contract reference only.
+
 ## 4-Agent Pipeline
 
 1. **CV Comparison** (`roomwitness-vlm/agent01_cv.py`) — compares move-in vs move-out
