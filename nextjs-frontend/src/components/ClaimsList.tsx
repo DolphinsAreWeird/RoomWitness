@@ -38,7 +38,7 @@ export default function ClaimsList({ claims, onChange }: Props) {
                 <label>รายการ <span className="lbl-en">Item</span></label>
                 <input
                   type="text"
-                  placeholder="e.g. bedroom wall"
+                  placeholder="เช่น ผนังห้องนอน · Bedroom wall"
                   value={c.item}
                   onChange={e => update(i, 'item', e.target.value)}
                 />
@@ -47,7 +47,7 @@ export default function ClaimsList({ claims, onChange }: Props) {
                 <label>รายละเอียด <span className="lbl-en">Description</span></label>
                 <input
                   type="text"
-                  placeholder="Describe the damage"
+                  placeholder="อธิบายความเสียหาย · Describe the damage"
                   value={c.description}
                   onChange={e => update(i, 'description', e.target.value)}
                 />
@@ -63,7 +63,7 @@ export default function ClaimsList({ claims, onChange }: Props) {
                 />
               </div>
             </div>
-            <button type="button" className="btn-remove" onClick={() => remove(i)}>✕</button>
+            <button type="button" className="btn-remove" aria-label={`ลบรายการ ${i + 1} · Remove claim`} onClick={() => remove(i)}>✕</button>
           </div>
         ))}
       </div>

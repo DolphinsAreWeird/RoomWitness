@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { addMoveInRecord } from '@/lib/moveInVault';
 
 export default function MoveInPage() {
@@ -44,17 +45,19 @@ export default function MoveInPage() {
         <div className="header-inner">
           <div>
             <h1>RoomWitness</h1>
-            <p className="subtitle">Document your move-in · Free, no AI used yet</p>
+            <p className="subtitle">บันทึกสภาพห้องวันนี้ เพื่อเป็นหลักฐานวันย้ายออก<span className="h2-en">Document your move-in · Free</span></p>
           </div>
         </div>
       </header>
 
-      <main>
+      <main className="move-in-workspace">
+        <Link href="/" className="wiz-back">← หน้าหลัก · Home</Link>
+        <div className="move-in-intro"><h1>เก็บหลักฐานตั้งแต่วันแรก</h1><p>ถ่ายภาพผนัง พื้น เฟอร์นิเจอร์ และร่องรอยที่มีอยู่แล้ว</p><small>Capture walls, floors, furniture and any existing damage.</small></div>
         <section className="card">
           <h2>บันทึกตอนเข้าอยู่ <span className="h2-en">Move-in record</span></h2>
           <div className="field">
             <label>ชื่อห้อง/ที่พัก <span className="lbl-en">Property nickname</span></label>
-            <input type="text" placeholder="e.g. Ideo Mobi Room 12B" value={label} onChange={e => setLabel(e.target.value)} />
+            <input type="text" placeholder="เช่น ห้อง 12B · Room 12B" value={label} onChange={e => setLabel(e.target.value)} />
           </div>
 
           <input ref={inputRef} type="file" accept="image/*" multiple className="dz-input"
@@ -75,8 +78,9 @@ export default function MoveInPage() {
         </section>
 
         <div className="submit-row">
-          <button type="button" onClick={save}>Save move-in record — free</button>
+          <button type="button" onClick={save}>บันทึกรูปเข้าอยู่ฟรี · Save move-in record</button>
         </div>
+        <p className="move-in-storage">รูปถูกบันทึกในเบราว์เซอร์บนอุปกรณ์นี้ โปรดเก็บต้นฉบับไว้ด้วย<span className="h2-en">Photos are saved in this browser on this device. Keep your original copies.</span></p>
       </main>
     </>
   );

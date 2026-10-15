@@ -29,8 +29,8 @@ function esc(s: unknown) {
 interface StepBadgeProps { n: number; state: StepState; label: string; }
 function StepBadge({ n, state, label }: StepBadgeProps) {
   return (
-    <div className={`pip-step ${state}`}>
-      <div className="pip-dot" />
+    <div className={`pip-step ${state}`} aria-current={state === 'active' ? 'step' : undefined}>
+      <div className="pip-dot">{state === 'done' ? '✓' : state === 'error' ? '!' : n}</div>
       {label}
     </div>
   );
@@ -50,14 +50,14 @@ function AgentCard({ n, title, titleTh, subtitle, colorClass, state, children }:
   const [mobileOpen, setMobileOpen] = useState(false);
   if (state === 'idle') return null;
   return (
-    <div className={`agent-card ${mobileOpen ? '' : 'mob-collapsed'}`}>
+    <div id={`assessment-${n}`} className={`agent-card ${mobileOpen ? '' : 'mob-collapsed'}`}>
       <div className="agent-card-hdr">
         <div className={`agent-num ${colorClass}`}>{String(n).padStart(2, '0')}</div>
         <div className="agent-card-titles">
           <h3>{titleTh} <span className="h3-en">{title}</span></h3>
           <p>{subtitle}</p>
         </div>
-        <div className="agent-status">
+        <div className="agent-status" role="status">
           {state === 'active' && <><span className="spinner-sm" />กำลังวิเคราะห์…</>}
           {state === 'done'   && <span className="ok">✓ เสร็จสิ้น</span>}
           {state === 'error'  && <span style={{ color: 'var(--red)' }}>✗ ผิดพลาด</span>}
@@ -67,6 +67,7 @@ function AgentCard({ n, title, titleTh, subtitle, colorClass, state, children }:
             type="button"
             className="agent-expand-toggle"
             onClick={() => setMobileOpen(o => !o)}
+            aria-expanded={mobileOpen}
             aria-label={mobileOpen ? 'Collapse' : 'Expand'}
           >
             {mobileOpen ? '▴' : '▾'}
@@ -100,15 +101,25 @@ export default function Pipeline({ steps, results, moveInPreviews, moveOutPrevie
 
   return (
     <div id="pipeline">
+      <div className="pipeline-heading">
+        <h2>{allDone ? 'ผลการวิเคราะห์ของคุณ' : 'กำลังตรวจสอบหลักฐานของคุณ'}</h2>
+        <p>{allDone ? 'Your case assessment' : 'Evidence review · Live analysis progress'}</p>
+      </div>
+      {results.agent03 && <nav className="assessment-nav" aria-label="Assessment sections">
+        <a href="#assessment-3">ผลวินิจฉัย<small>Claim verdicts</small></a>
+        <a href="#assessment-1">หลักฐานภาพถ่าย<small>Photo evidence</small></a>
+        <a href="#assessment-2">สัญญาเช่า<small>Contract review</small></a>
+        {results.agent04?.case_id && <a href="#case-documents">เอกสารของคุณ<small>Your documents</small></a>}
+      </nav>}
       {/* Progress bar */}
       <div className="pip-bar">
-        <StepBadge n={1} state={s1} label="CV" />
+        <StepBadge n={1} state={s1} label="ภาพถ่าย · Photos" />
         <div className="pip-line" />
-        <StepBadge n={2} state={s2} label="Contract" />
+        <StepBadge n={2} state={s2} label="สัญญา · Contract" />
         <div className="pip-line" />
-        <StepBadge n={3} state={s3} label="Legal" />
+        <StepBadge n={3} state={s3} label="กฎหมาย · Legal" />
         <div className="pip-line" />
-        <StepBadge n={4} state={s4} label="Docs" />
+        <StepBadge n={4} state={s4} label="เอกสาร · Docs" />
       </div>
 
       {/* Hero ฿ recoverable strip — the emotional payoff */}
@@ -317,7 +328,7 @@ export default function Pipeline({ steps, results, moveInPreviews, moveOutPrevie
 
       {/* Download section — prominent, below the pipeline */}
       {results.agent04?.case_id && (
-        <section className="download-section">
+        <section id="case-documents" className="download-section">
           <h2 className="download-title">
             ดาวน์โหลดเอกสารของคุณ
             <span className="download-title-en">Download your documents</span>

@@ -13,18 +13,18 @@ const IDLE_STEPS: StepState[] = ['idle', 'idle', 'idle', 'idle'];
 
 // Mirrors roomwitness-app/src/app/new-case.tsx's 4-step wizard, accent-for-accent.
 const WIZ_STEPS = [
-  { headline: 'What is the\nlandlord charging?', sub: 'Add each deduction item',       accent: 'var(--amber-dark)' },
-  { headline: 'Add your\nphotos',                 sub: 'Move-in vs move-out',           accent: 'var(--blue)' },
-  { headline: 'Extra\nevidence',                  sub: 'Contract, messages — optional', accent: 'var(--green)' },
-  { headline: "You're\nready.",                   sub: 'Review before AI analysis',     accent: 'var(--purple)' },
+  { headline: 'เจ้าของบ้านหักค่าอะไรบ้าง?', sub: 'Landlord deductions · Add each claim below', accent: 'var(--amber-dark)' },
+  { headline: 'เปรียบเทียบภาพห้องของคุณ', sub: 'Photo evidence · Move-in vs move-out (optional)', accent: 'var(--blue)' },
+  { headline: 'เพิ่มหลักฐานประกอบ', sub: 'Supporting evidence · Contract and messages (optional)', accent: 'var(--green)' },
+  { headline: 'ตรวจสอบข้อมูลก่อนวิเคราะห์', sub: 'Review your case · Before AI analysis', accent: 'var(--purple)' },
 ];
 
 // Line items sum to the flat ฿99 charged once per claim — metered like a real API bill.
 const LINE_ITEMS = [
-  { Icon: CameraIcon,   label: 'CV photo comparison',    sub: 'move-in vs move-out · Llama-4-Scout', price: 25 },
-  { Icon: FileTextIcon, label: 'Contract clause parsing', sub: 'lease OCR + extraction',              price: 20 },
-  { Icon: ScaleIcon,    label: 'Legal classification',    sub: 'per claim · ป.พ.พ. + OCPB RAG',        price: 24 },
-  { Icon: StackIcon,    label: 'Document generation',     sub: '3 ready-to-file Thai documents',       price: 30 },
+  { Icon: CameraIcon, label: 'เปรียบเทียบภาพถ่าย', sub: 'Photo comparison · Move-in vs move-out', price: 25 },
+  { Icon: FileTextIcon, label: 'ตรวจข้อสัญญาเช่า', sub: 'Contract review · Lease text extraction', price: 20 },
+  { Icon: ScaleIcon, label: 'วิเคราะห์ข้อกฎหมาย', sub: 'Legal assessment · ป.พ.พ. + สคบ.', price: 24 },
+  { Icon: StackIcon, label: 'จัดทำเอกสารภาษาไทย', sub: 'Document generation · 3 Thai documents', price: 30 },
 ];
 const TOTAL_PRICE = LINE_ITEMS.reduce((s, i) => s + i.price, 0);
 
@@ -308,17 +308,17 @@ export default function AppPage() {
       <>
         <header><div className="header-inner"><div><h1>RoomWitness</h1></div></div></header>
         <div className="paywall-wrap">
-          <button className="wiz-back" onClick={() => setShowPaywall(false)} style={{ marginBottom: 20 }}>← Back</button>
+          <button className="wiz-back" onClick={() => setShowPaywall(false)} style={{ marginBottom: 20 }}>← ย้อนกลับ · Back</button>
           <div className="paywall-lock"><LockIcon size={26} color="var(--amber-dark)" /></div>
-          <div className="paywall-title">You're filing a real claim</div>
+          <div className="paywall-title">เตรียมเอกสารเพื่อเรียกคืนเงินประกัน<span className="h2-en">Prepare your deposit claim</span></div>
           <p className="paywall-sub">
-            Downloading, saving move-in photos, and entering claims are always free.<br />
-            This is the one step that costs money — running the AI and generating your documents.
+            บันทึกรูปและกรอกรายการได้ฟรี ชำระครั้งเดียวเพื่อวิเคราะห์และสร้างเอกสาร<br />
+            One payment for AI analysis and document generation.
           </p>
           <div className="invoice-card">
             <div className="invoice-meta">
               <span>{validClaims.length} claim{validClaims.length !== 1 ? 's' : ''} · ฿{totalCharged.toLocaleString()} disputed</span>
-              <em>ONE-TIME</em>
+              <em>ชำระครั้งเดียว · One-time</em>
             </div>
             <div className="invoice-total">฿{TOTAL_PRICE}</div>
             {LINE_ITEMS.map((f, i) => (
@@ -328,12 +328,12 @@ export default function AppPage() {
                 <div className="invoice-line-price">฿{f.price}</div>
               </div>
             ))}
-            <div className="invoice-total-row"><span>Total, billed once</span><span>฿{TOTAL_PRICE}</span></div>
+            <div className="invoice-total-row"><span>ยอดชำระครั้งเดียว · Total</span><span>฿{TOTAL_PRICE}</span></div>
           </div>
           <button className="paywall-pay-btn" onClick={pay} disabled={paying}>
-            {paying ? 'Processing…' : `Pay ฿${TOTAL_PRICE} & analyze`}
+            {paying ? 'กำลังดำเนินการ · Processing…' : `ชำระ ฿${TOTAL_PRICE} และวิเคราะห์ · Pay & analyze`}
           </button>
-          <button className="paywall-cancel" onClick={() => setShowPaywall(false)}>Cancel</button>
+          <button className="paywall-cancel" onClick={() => setShowPaywall(false)}>ยกเลิก · Cancel</button>
         </div>
       </>
     );
@@ -341,14 +341,20 @@ export default function AppPage() {
 
   return (
     <>
-      <div style={{ '--wiz-accent': s.accent } as CSSProperties}>
+      <div className={showPipeline ? 'case-flow is-analyzing' : 'case-flow'} style={{ '--wiz-accent': s.accent } as CSSProperties}>
         <div className="wiz-header">
+          <div className="wiz-brand">RoomWitness<span>ผู้ช่วยเรื่องเงินประกันเช่า<small>Rental deposit disputes</small></span></div>
           <div className="wiz-topline">
-            <Link href="/" className="wiz-back">← Home</Link>
-            <span className="wiz-step-pill">Step {step + 1} of 4</span>
+            <Link href="/" className="wiz-back">← หน้าหลัก · Home</Link>
+            <span className="wiz-step-pill">ขั้นตอน {step + 1} / 4 · Step {step + 1}</span>
           </div>
           <div className="wiz-progress">
-            {[0, 1, 2, 3].map(i => <div key={i} className={`wiz-progress-seg ${i <= step ? 'on' : ''}`} />)}
+            {['รายการหักเงิน|Claims', 'ภาพถ่าย|Photos', 'หลักฐานเพิ่มเติม|Extras', 'ตรวจสอบ|Review'].map((label, i) => (
+              <div key={i} className={`wiz-progress-seg ${i <= step ? 'on' : ''} ${i === step ? 'current' : ''}`} aria-current={i === step ? 'step' : undefined}>
+                <span className="wiz-progress-number">{i < step ? '✓' : i + 1}</span>
+                <span>{label.split('|')[0]}<small>{label.split('|')[1]}</small></span>
+              </div>
+            ))}
           </div>
           <div className="wiz-title-row">
             <div>
@@ -360,6 +366,7 @@ export default function AppPage() {
         </div>
 
         <main className="wiz-body">
+          <div className="case-editor">
           {/* ── Step 0: Claims ─────────────────────────── */}
           {step === 0 && <ClaimsList claims={claims} onChange={setClaims} />}
 
@@ -373,7 +380,7 @@ export default function AppPage() {
 
               <div className="photo-columns">
                 <div className="photo-col">
-                  <div className="photo-col-label">Move-in</div>
+                  <div className="photo-col-label">ภาพเมื่อเข้าอยู่<span className="h2-en">Move-in</span></div>
                   {moveInRecords.length > 0 && (
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
                       {moveInRecords.map(r => (
@@ -397,19 +404,19 @@ export default function AppPage() {
                     ))}
                     {moveInRecords.length === 0 && (
                       <button type="button" className="photo-add-btn" onClick={() => moveInInputRef.current?.click()}>
-                        <span>+</span><span>Add</span>
+                        <span>+</span><span>เพิ่มรูป · Add</span>
                       </button>
                     )}
                   </div>
                   {moveInRecords.length === 0 && (
                     <Link href="/move-in" style={{ fontSize: 12, color: 'var(--blue)', marginTop: 6, display: 'inline-block' }}>
-                      Tip: save move-in photos for free the day you move in →
+                      บันทึกรูปวันเข้าอยู่ได้ฟรี · Save move-in photos →
                     </Link>
                   )}
                 </div>
 
                 <div className="photo-col">
-                  <div className="photo-col-label">Move-out</div>
+                  <div className="photo-col-label">ภาพเมื่อย้ายออก<span className="h2-en">Move-out</span></div>
                   <div className="photo-thumb-grid">
                     {moveOutPrevs.map((src, i) => (
                       <div key={i} className="photo-thumb">
@@ -419,7 +426,7 @@ export default function AppPage() {
                       </div>
                     ))}
                     <button type="button" className="photo-add-btn" onClick={() => moveOutInputRef.current?.click()}>
-                      <span>+</span><span>Add</span>
+                      <span>+</span><span>เพิ่มรูป · Add</span>
                     </button>
                   </div>
                 </div>
@@ -431,40 +438,40 @@ export default function AppPage() {
           {step === 2 && (
             <>
               <section className="card">
-                <h2>Rental contract</h2>
+                <h2>สัญญาเช่า<span className="h2-en">Rental contract</span></h2>
                 <div className="contract-upload-row">
                   <DropZone
-                    label="Upload PDF or image" sublabel="auto-extracts text" accept=".pdf,image/*"
+                    label="อัปโหลดสัญญา · PDF / image" sublabel="อ่านข้อความอัตโนมัติ · Auto-extract text" accept=".pdf,image/*"
                     file={contractFile} onFile={setContractFile} className="drop-zone-doc" minHeight="70px"
                   />
                   <div className="contract-text-wrap">
                     <div className="contract-extract-row">
-                      <label>Relevant clause</label>
-                      {contractFile && <button ref={extractBtnRef} type="button" className="btn-extract" onClick={extractContract}>Extract ↑</button>}
+                      <label>ข้อสัญญาที่เกี่ยวข้อง <span className="lbl-en">Relevant clause</span></label>
+                      {contractFile && <button ref={extractBtnRef} type="button" className="btn-extract" onClick={extractContract}>อ่านข้อความ · Extract</button>}
                     </div>
                     <textarea rows={4} placeholder="Paste a clause, or upload above to auto-extract."
                       value={contractClause} onChange={e => setContractClause(e.target.value)} />
                   </div>
                 </div>
                 <div className="contract-meta-grid">
-                  <div className="field"><label>Lease start</label><input type="date" value={leaseStart} onChange={e => setLeaseStart(e.target.value)} /></div>
-                  <div className="field"><label>Lease end</label><input type="date" value={leaseEnd} onChange={e => setLeaseEnd(e.target.value)} /></div>
-                  <div className="field"><label>Deposit paid (฿)</label><input type="number" min="0" placeholder="20000" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} /></div>
-                  <div className="field"><label>Monthly rent (฿)</label><input type="number" min="0" placeholder="10000" value={monthlyRent} onChange={e => setMonthlyRent(e.target.value)} /></div>
-                  <div className="field"><label>Landlord units (0=unknown)</label><input type="number" min="0" placeholder="5" value={unitCount} onChange={e => setUnitCount(e.target.value)} /></div>
+                  <div className="field"><label>วันเริ่มสัญญา <span className="lbl-en">Lease start</span></label><input type="date" value={leaseStart} onChange={e => setLeaseStart(e.target.value)} /></div>
+                  <div className="field"><label>วันสิ้นสุดสัญญา <span className="lbl-en">Lease end</span></label><input type="date" value={leaseEnd} onChange={e => setLeaseEnd(e.target.value)} /></div>
+                  <div className="field"><label>เงินประกัน (฿) <span className="lbl-en">Deposit paid</span></label><input type="number" min="0" placeholder="20000" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} /></div>
+                  <div className="field"><label>ค่าเช่าต่อเดือน (฿) <span className="lbl-en">Monthly rent</span></label><input type="number" min="0" placeholder="10000" value={monthlyRent} onChange={e => setMonthlyRent(e.target.value)} /></div>
+                  <div className="field"><label>จำนวนห้องของผู้ให้เช่า <span className="lbl-en">Units (0 = unknown)</span></label><input type="number" min="0" placeholder="5" value={unitCount} onChange={e => setUnitCount(e.target.value)} /></div>
                 </div>
               </section>
 
               <section className="card">
-                <h2>Chat screenshots <span className="h2-en">LINE / WhatsApp / SMS</span></h2>
+                <h2>ภาพแชทสนทนา <span className="h2-en">Chat screenshots · LINE / WhatsApp / SMS</span></h2>
                 <div className="screenshot-dz" onClick={() => screenshotInputRef.current?.click()}>
                   <input ref={screenshotInputRef} type="file" accept="image/*" multiple className="dz-input"
                     onChange={e => { if (e.target.files) addScreenshots(e.target.files); e.target.value = ''; }} />
                   {screenshotPrevs.length === 0 ? (
                     <div className="screenshot-dz-placeholder">
-                      <strong>Add screenshots</strong>
-                      <span>Multiple files OK</span>
-                      <button type="button" className="btn-secondary" onClick={e => { e.stopPropagation(); screenshotInputRef.current?.click(); }}>Browse</button>
+                      <strong>เพิ่มภาพแชท · Add screenshots</strong>
+                      <span>เลือกได้หลายไฟล์ · Multiple files accepted</span>
+                      <button type="button" className="btn-secondary" onClick={e => { e.stopPropagation(); screenshotInputRef.current?.click(); }}>เลือกไฟล์ · Browse</button>
                     </div>
                   ) : (
                     <div className="screenshot-grid">
@@ -480,14 +487,14 @@ export default function AppPage() {
               </section>
 
               <section className="card">
-                <h2>Written promises</h2>
+                <h2>ข้อตกลงเป็นลายลักษณ์อักษร<span className="h2-en">Written promises</span></h2>
                 <div className="two-col">
                   <div className="field">
-                    <label>Landlord said / promised</label>
+                    <label>เจ้าของบ้านตกลงไว้ <span className="lbl-en">Landlord promises</span></label>
                     <textarea rows={4} placeholder='"I will return deposit in full if room is clean"' value={landlordPromises} onChange={e => setLandlordPromises(e.target.value)} />
                   </div>
                   <div className="field">
-                    <label>You said / promised</label>
+                    <label>คุณได้แจ้งหรือตกลงไว้ <span className="lbl-en">Your statements</span></label>
                     <textarea rows={4} placeholder='"Wall scuff was already there at move-in"' value={tenantPromises} onChange={e => setTenantPromises(e.target.value)} />
                   </div>
                 </div>
@@ -499,21 +506,37 @@ export default function AppPage() {
           {step === 3 && (
             <>
               <div className="review-hero">
-                <div className="review-hero-label">TOTAL DISPUTED</div>
+                <div className="review-hero-label">ยอดหักเงินที่ต้องการตรวจสอบ<span className="h2-en">Total disputed</span></div>
                 <div className="review-hero-amount">฿{totalCharged.toLocaleString()}</div>
                 <div className="review-stat-row">
-                  <div className="review-stat"><b>{validClaims.length}</b><span>CLAIMS</span></div>
-                  <div className="review-stat"><b>{moveInPrevs.length}</b><span>MOVE-IN</span></div>
-                  <div className="review-stat"><b>{moveOutPrevs.length}</b><span>MOVE-OUT</span></div>
+                  <div className="review-stat"><b>{validClaims.length}</b><span>รายการ · Claims</span></div>
+                  <div className="review-stat"><b>{moveInPrevs.length}</b><span>รูปเข้าอยู่ · Move-in</span></div>
+                  <div className="review-stat"><b>{moveOutPrevs.length}</b><span>รูปย้ายออก · Move-out</span></div>
                 </div>
               </div>
+              <section className="card review-claims">
+                <div className="section-title-row">
+                  <h2>รายการที่ส่งวิเคราะห์<span className="h2-en">Claims to assess</span></h2>
+                  <button className="text-button" onClick={() => setStep(0)}>แก้ไข · Edit</button>
+                </div>
+                {validClaims.map(c => (
+                  <div className="review-claim" key={c.claim_id}>
+                    <div><strong>{c.item}</strong><p>{c.description || '—'}</p></div>
+                    <b>฿{c.amount_thb.toLocaleString()}</b>
+                  </div>
+                ))}
+                <div className="review-evidence-links">
+                  <button className="text-button" onClick={() => setStep(1)}>แก้ไขรูปถ่าย · Edit photos</button>
+                  <button className="text-button" onClick={() => setStep(2)}>แก้ไขหลักฐาน · Edit evidence</button>
+                </div>
+              </section>
               <div className="review-agents">
-                <div className="review-agents-label">4 AI agents will run</div>
+                <div className="review-agents-label">ตรวจสอบหลักฐาน 4 ขั้นตอน<span className="h2-en">Your AI analysis includes</span></div>
                 {[
-                  { n: '01', l: 'CV · Photo comparison',  c: 'var(--blue)' },
-                  { n: '02', l: 'Contract · Clause parser', c: 'var(--purple)' },
-                  { n: '03', l: 'Legal · ป.พ.พ. RAG',      c: 'var(--green)' },
-                  { n: '04', l: 'Docs · Thai PDF export',  c: 'var(--amber-dark)' },
+                  { n: '01', l: 'เปรียบเทียบภาพ · Photo comparison', c: 'var(--blue)' },
+                  { n: '02', l: 'ตรวจสัญญาเช่า · Contract review', c: 'var(--purple)' },
+                  { n: '03', l: 'วิเคราะห์กฎหมาย · Legal assessment', c: 'var(--green)' },
+                  { n: '04', l: 'จัดทำเอกสาร · Thai PDF documents', c: 'var(--amber-dark)' },
                 ].map(a => (
                   <div key={a.n} className="review-agent-row">
                     <div className="review-agent-num" style={{ background: a.c }}>{a.n}</div>
@@ -525,16 +548,44 @@ export default function AppPage() {
           )}
 
           {error && <div className="error-banner">⚠ {error}</div>}
+          </div>
+          <aside className="case-brief" aria-label="Case summary">
+            <div className="brief-heading"><ScaleIcon size={22} /><span>แฟ้มข้อพิพาทของคุณ<small>Your case file</small></span></div>
+            <div className="brief-total"><span>ยอดหักเงิน · Deductions</span><strong>฿{totalCharged.toLocaleString()}</strong></div>
+            <dl className="brief-evidence">
+              <div><dt>รายการหักเงิน<small>Claims</small></dt><dd>{validClaims.length}</dd></div>
+              <div><dt>ภาพเมื่อเข้าอยู่<small>Move-in photos</small></dt><dd>{moveInPrevs.length}</dd></div>
+              <div><dt>ภาพเมื่อย้ายออก<small>Move-out photos</small></dt><dd>{moveOutPrevs.length}</dd></div>
+              <div><dt>สัญญาเช่า<small>Rental contract</small></dt><dd>{contractFile || contractClause.trim() ? '✓' : '—'}</dd></div>
+              <div><dt>ภาพแชท<small>Chat screenshots</small></dt><dd>{screenshotPrevs.length}</dd></div>
+            </dl>
+            <div className="brief-guidance">
+              <strong>{['เริ่มจากรายการที่ถูกหัก', 'เห็นความเปลี่ยนแปลงชัดขึ้น', 'ทุกข้อตกลงเป็นหลักฐานได้', 'ตรวจสอบก่อนดำเนินการ'][step]}</strong>
+              <p>{[
+                'กรอกแต่ละรายการตามที่เจ้าของบ้านแจ้ง พร้อมยอดเงินที่เรียกเก็บ',
+                'ใช้ภาพมุมเดียวกันก่อนและหลังเช่า หากไม่มีภาพ สามารถข้ามขั้นตอนนี้ได้',
+                'แนบสัญญาหรือข้อความที่เกี่ยวข้อง หากไม่มี สามารถดำเนินการต่อได้',
+                'ตรวจสอบยอดเงิน รายการ และหลักฐาน คุณสามารถย้อนกลับไปแก้ไขได้',
+              ][step]}</p>
+              <small>{[
+                'Use the deduction list provided by your landlord, with the amount for each item.',
+                'Matching camera angles help comparison. You can continue without photos.',
+                'Add relevant lease terms or messages. Supporting evidence is optional.',
+                'Check the amounts and evidence. You can edit each section before analysis.',
+              ][step]}</small>
+            </div>
+            <div className="brief-price">วิเคราะห์และจัดทำเอกสาร <b>฿{TOTAL_PRICE}</b><small>Analysis & documents · One-time payment</small></div>
+          </aside>
         </main>
 
         <div className="wiz-footer">
           <div className="wiz-footer-row">
-            {step > 0 && <button className="btn-secondary" onClick={goBack}>Back</button>}
+            {step > 0 && <button className="btn-secondary" onClick={goBack}>ย้อนกลับ · Back</button>}
             {step < 3 ? (
-              <button className="wiz-btn-next" onClick={goNext}>Continue →</button>
+              <button className="wiz-btn-next" onClick={goNext}>ถัดไป · Continue →</button>
             ) : (
               <button className="wiz-btn-next" onClick={requestAnalysis} disabled={running}>
-                {running ? <><span className="spinner-btn" />Analyzing… {elapsed}s</> : 'Continue to unlock AI analysis →'}
+                {running ? <><span className="spinner-btn" />กำลังวิเคราะห์ · Analyzing… {elapsed}s</> : 'ดำเนินการวิเคราะห์ · Continue to analysis →'}
               </button>
             )}
           </div>
@@ -542,6 +593,14 @@ export default function AppPage() {
       </div>
 
       {showPipeline && (
+        <>
+        <header className="analysis-header"><div className="header-inner">
+          <Link href="/" className="analysis-brand">RoomWitness</Link>
+          <div className="analysis-toolbar">
+            {running ? <span className="analysis-live"><span />กำลังวิเคราะห์ · {elapsed}s</span> : <button className="btn-secondary" onClick={() => setShowPipeline(false)}>กลับไปตรวจสอบ · Back to review</button>}
+          </div>
+        </div></header>
+        {error && <div className="analysis-error error-banner" role="alert">{error}</div>}
         <Pipeline
           steps={steps}
           results={results}
@@ -549,6 +608,7 @@ export default function AppPage() {
           moveOutPreviews={moveOutPrevs}
           depositAmount={depositAmount}
         />
+        </>
       )}
     </>
   );
