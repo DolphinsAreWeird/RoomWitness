@@ -53,7 +53,8 @@ def run_cv_assessment(
             client=client,
         )
 
-    with ThreadPoolExecutor(max_workers=max(1, len(landlord_claims))) as pool:
+    # capped — an attacker-controlled claims list shouldn't spawn unbounded threads
+    with ThreadPoolExecutor(max_workers=min(8, max(1, len(landlord_claims)))) as pool:
         assessments = list(pool.map(_assess, landlord_claims))
 
     disputed = sum(1 for a in assessments if a.get("supports_landlord_claim") == "NO")
