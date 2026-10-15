@@ -5,14 +5,19 @@ Extracts promises, deposit mentions, and overall tone for use as supporting evid
 
 import base64
 import json
+import logging
 import os
 import re
 from io import BytesIO
 
-from groq import Groq
+from openai import OpenAI
 from PIL import Image
 
-MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+# Groq retired llama-4-scout (2026-07-17) with no vision model left on this
+# tier — routed to a local LM Studio VLM instead (see agent01_cv/__init__.py).
+MODEL = os.getenv("VLM_MODEL", "qwen/qwen2.5-vl-7b")
+
+logger = logging.getLogger(__name__)
 
 
 def _encode_image(image_path: str) -> str:
@@ -27,7 +32,7 @@ def _encode_image(image_path: str) -> str:
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
-def extract_from_screenshot(image_path: str, screenshot_index: int, client: Groq) -> dict:
+def extract_from_screenshot(image_path: str, screenshot_index: int, client: OpenAI) -> dict:
     """
     Send one conversation screenshot to Llama-4-Scout and extract structured evidence.
 
@@ -100,7 +105,7 @@ Rules:
             except json.JSONDecodeError:
                 pass
     except Exception:
-        pass
+        logger.exception("extract_from_screenshot failed for screenshot #%d", screenshot_index)
 
     return {
         "readable": False,
@@ -120,7 +125,7 @@ def run_evidence_analysis(
     screenshot_paths: list[str],
     manual_landlord_promises: str,
     manual_tenant_promises: str,
-    client: Groq,
+    client: OpenAI,
 ) -> dict:
     """
     Process all conversation screenshots plus manually entered promises.

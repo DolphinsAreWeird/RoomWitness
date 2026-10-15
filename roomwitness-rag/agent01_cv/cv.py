@@ -5,10 +5,12 @@ Photo pairs are downloaded from S3 (or local paths in demo mode) before assessme
 
 import base64
 import json
+import logging
+import os
 import re
 from io import BytesIO
 
-from groq import Groq
+from openai import OpenAI
 from PIL import Image
 
 try:
@@ -18,14 +20,15 @@ except ImportError:
         def _wrap(fn): return fn
         return _wrap
 
-# TODO: Ensure GROQ_API_KEY is set in .env
-# TODO: Verify model availability — check https://console.groq.com for latest Scout model ID
-MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+# Groq retired llama-4-scout (2026-07-17) with no vision model left on this
+# tier — routed to a local LM Studio VLM instead (see agent01_cv/__init__.py).
+MODEL = os.getenv("VLM_MODEL", "qwen/qwen2.5-vl-7b")
+
+logger = logging.getLogger(__name__)
 
 
-def _get_groq_client(api_key: str) -> Groq:
-    """Return a Groq client. api_key comes from shared/config.py at startup."""
-    return Groq(api_key=api_key)
+def _get_groq_client(api_key: str) -> OpenAI:
+    return OpenAI(api_key=api_key, base_url=os.getenv("VLM_BASE_URL", "http://localhost:1234/v1"))
 
 
 def prepare_image(image_path: str) -> str:
@@ -55,10 +58,10 @@ def assess_claim(
     claim_item: str,
     claim_description: str,
     claim_amount: float,
-    client: Groq,
+    client: OpenAI,
 ) -> dict:
     """
-    Send all move-in and move-out images and one claim to Groq Llama-4-Scout.
+    Send all move-in and move-out images and one claim to the VLM.
 
     Args:
         move_in_b64s: List of base64 JPEGs of move-in photos.
@@ -145,7 +148,7 @@ Rules:
             except json.JSONDecodeError:
                 pass
     except Exception:
-        pass
+        logger.exception("assess_claim failed for claim_item=%r", claim_item)
 
     return {
         "item": claim_item,

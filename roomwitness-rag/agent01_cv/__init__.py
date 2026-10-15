@@ -6,7 +6,8 @@ with the original flat signatures so portal/app.py imports work unchanged:
 """
 
 import os
-from groq import Groq
+from concurrent.futures import ThreadPoolExecutor
+from openai import OpenAI
 from agent01_cv.cv import assess_claim, prepare_image, MODEL
 from agent01_cv.evidence import run_evidence_analysis as _run_evidence_analysis
 
@@ -18,8 +19,14 @@ except ImportError:
         return _wrap
 
 
-def _get_client() -> Groq:
-    return Groq(api_key=os.getenv("GROQ_API_KEY"))
+# ponytail: Groq retired its vision model (llama-4-scout) with no free-tier
+# replacement — routed to a local LM Studio VLM instead. Swap VLM_BASE_URL
+# back to a hosted vision API if/when one becomes available.
+def _get_client() -> OpenAI:
+    return OpenAI(
+        api_key=os.getenv("VLM_API_KEY", "lm-studio"),
+        base_url=os.getenv("VLM_BASE_URL", "http://localhost:1234/v1"),
+    )
 
 
 @traceable(name="agent01/run_cv_assessment", run_type="chain")
@@ -33,9 +40,11 @@ def run_cv_assessment(
     move_in_b64s  = [prepare_image(p) for p in move_in_paths  if p]
     move_out_b64s = [prepare_image(p) for p in move_out_paths if p]
 
-    assessments = []
-    for claim in landlord_claims:
-        result = assess_claim(
+    # ponytail: calls run concurrently (the VLM serves them in parallel, not
+    # queued) so N claims cost ~1 call's latency instead of N calls' latency —
+    # needed since Next.js's dev rewrite proxy aborts around 30s.
+    def _assess(claim):
+        return assess_claim(
             move_in_b64s=move_in_b64s,
             move_out_b64s=move_out_b64s,
             claim_item=claim["item"],
@@ -43,7 +52,9 @@ def run_cv_assessment(
             claim_amount=float(claim.get("amount_thb", 0)),
             client=client,
         )
-        assessments.append(result)
+
+    with ThreadPoolExecutor(max_workers=max(1, len(landlord_claims))) as pool:
+        assessments = list(pool.map(_assess, landlord_claims))
 
     disputed = sum(1 for a in assessments if a.get("supports_landlord_claim") == "NO")
     return {
