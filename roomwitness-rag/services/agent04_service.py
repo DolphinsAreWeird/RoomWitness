@@ -27,7 +27,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import cm
@@ -72,15 +72,21 @@ def _register_fonts() -> tuple[str, str]:
 FR, FB = _register_fonts()
 
 # ── Colour palette ─────────────────────────────────────────────────────────────
+# Matches the live product's brand tokens (nextjs-frontend/src/app/globals.css)
+# so a generated PDF looks like it came from the same product as the web app.
 
-NAVY     = colors.HexColor("#1B3A6B")
-NAVY_LT  = colors.HexColor("#E8F0F9")
-STEEL    = colors.HexColor("#4A6FA5")
-RED      = colors.HexColor("#C0392B")
-GREEN    = colors.HexColor("#27AE60")
-ORANGE   = colors.HexColor("#D35400")
-GREY_LT  = colors.HexColor("#F5F5F5")
+NAVY     = colors.HexColor("#16324A")
+NAVY_LT  = colors.HexColor("#EDF3F8")
+STEEL    = colors.HexColor("#244C69")
+RED      = colors.HexColor("#B5333D")
+RED_BG   = colors.HexColor("#FDF0F1")
+GREEN    = colors.HexColor("#18734F")
+GREEN_BG = colors.HexColor("#EDF8F1")
+ORANGE   = colors.HexColor("#96620D")
+ORANGE_BG= colors.HexColor("#FFF7E6")
+GREY_LT  = colors.HexColor("#F7F9FB")
 GREY     = colors.HexColor("#AAAAAA")
+BORDER   = colors.HexColor("#DCE4EC")
 
 # ── Styles ─────────────────────────────────────────────────────────────────────
 
@@ -100,9 +106,11 @@ def _styles() -> dict:
             "section_hdr", fontName=FB, fontSize=11,
             textColor=NAVY, spaceBefore=12, spaceAfter=4, leading=16,
         ),
+        # ponytail: left-aligned, not justified — Thai has few spaces to
+        # stretch against, so TA_JUSTIFY blew single spaces into huge gaps
         "body": ParagraphStyle(
             "body", fontName=FR, fontSize=10,
-            leading=17, spaceAfter=6, alignment=TA_JUSTIFY,
+            leading=17, spaceAfter=6, alignment=TA_LEFT,
         ),
         "body_right": ParagraphStyle(
             "body_right", fontName=FR, fontSize=10,
@@ -300,14 +308,34 @@ def _verdict_badge_style(verdict: str, styles: dict) -> ParagraphStyle:
 
 
 
-def _page_num_canvas_maker(page_label: str):
-    """Returns a canvas maker function that draws footer on each page."""
+def _page_num_canvas_maker(page_label: str, case_id: str):
+    """Returns a canvas maker function that draws a letterhead band and
+    branded footer on each page, so a generated PDF reads as the same
+    product as the web app rather than a bare ReportLab printout."""
     def _on_page(canvas, doc):
         canvas.saveState()
+        w, h = A4
+
+        # Letterhead band — thin navy strip across the very top of the page
+        canvas.setFillColor(NAVY)
+        canvas.rect(0, h - 0.35*cm, w, 0.35*cm, stroke=0, fill=1)
+
+        # Brand wordmark, top-right corner
+        canvas.setFont(FB, 8)
+        canvas.setFillColor(STEEL)
+        canvas.drawRightString(w - 2.5*cm, h - 0.9*cm, "ROOMWITNESS")
+
+        # Footer rule + branded footer line
+        canvas.setStrokeColor(BORDER)
+        canvas.setLineWidth(0.5)
+        canvas.line(2.5*cm, 1.6*cm, w - 2.5*cm, 1.6*cm)
+
         canvas.setFont(FR, 8)
         canvas.setFillColor(GREY)
-        w = A4[0]
-        canvas.drawCentredString(w / 2, 1.2*cm, f"{page_label}  —  หน้า {doc.page}")
+        canvas.drawString(2.5*cm, 1.2*cm, f"RoomWitness · คดี {case_id.upper()}")
+        canvas.drawCentredString(w / 2, 1.2*cm, page_label)
+        canvas.drawRightString(w - 2.5*cm, 1.2*cm, f"หน้า {doc.page}")
+
         canvas.restoreState()
     return _on_page
 
@@ -436,8 +464,8 @@ def render_demand_letter(sections: dict, context: dict, case_id: str) -> tuple[b
         story.append(_thin_hr())
         story.append(Paragraph("กฎหมายที่อ้างอิง: " + " · ".join(unique_cites), s["small"]))
 
-    doc.build(story, onFirstPage=_page_num_canvas_maker("หนังสือเรียกร้องคืนเงินประกันการเช่า"),
-              onLaterPages=_page_num_canvas_maker("หนังสือเรียกร้องคืนเงินประกันการเช่า"))
+    canvas_maker = _page_num_canvas_maker("หนังสือเรียกร้องคืนเงินประกันการเช่า", case_id)
+    doc.build(story, onFirstPage=canvas_maker, onLaterPages=canvas_maker)
     return buf.getvalue(), doc.page
 
 
@@ -475,8 +503,8 @@ def render_evidence_summary(sections: dict, context: dict, case_id: str) -> tupl
     ]], colWidths=[5.3*cm, 5.3*cm, 5.3*cm])
     boxes.setStyle(TableStyle([
         ("BACKGROUND",   (0, 0), (0, -1), NAVY_LT),
-        ("BACKGROUND",   (1, 0), (1, -1), colors.HexColor("#FDECEA")),
-        ("BACKGROUND",   (2, 0), (2, -1), colors.HexColor("#EAF4EC")),
+        ("BACKGROUND",   (1, 0), (1, -1), RED_BG),
+        ("BACKGROUND",   (2, 0), (2, -1), GREEN_BG),
         ("BOX",          (0, 0), (0, -1), 1, STEEL),
         ("BOX",          (1, 0), (1, -1), 1, STEEL),
         ("BOX",          (2, 0), (2, -1), 1, STEEL),
@@ -555,8 +583,8 @@ def render_evidence_summary(sections: dict, context: dict, case_id: str) -> tupl
         story.append(_thin_hr())
         story.append(Paragraph(f"<i>Case summary (EN): {summary}</i>", s["small"]))
 
-    doc.build(story, onFirstPage=_page_num_canvas_maker("สรุปหลักฐานและผลการวินิจฉัยคดี"),
-              onLaterPages=_page_num_canvas_maker("สรุปหลักฐานและผลการวินิจฉัยคดี"))
+    canvas_maker = _page_num_canvas_maker("สรุปหลักฐานและผลการวินิจฉัยคดี", case_id)
+    doc.build(story, onFirstPage=canvas_maker, onLaterPages=canvas_maker)
     return buf.getvalue(), doc.page
 
 
@@ -691,8 +719,8 @@ def render_ocpb_complaint(sections: dict, context: dict, case_id: str) -> tuple[
     sig_tbl.setStyle(TableStyle([("FONTNAME", (0, 0), (-1, -1), FR)]))
     story.append(sig_tbl)
 
-    doc.build(story, onFirstPage=_page_num_canvas_maker("หนังสือร้องเรียนต่อ สคบ."),
-              onLaterPages=_page_num_canvas_maker("หนังสือร้องเรียนต่อ สคบ."))
+    canvas_maker = _page_num_canvas_maker("หนังสือร้องเรียนต่อ สคบ.", case_id)
+    doc.build(story, onFirstPage=canvas_maker, onLaterPages=canvas_maker)
     return buf.getvalue(), doc.page
 
 
