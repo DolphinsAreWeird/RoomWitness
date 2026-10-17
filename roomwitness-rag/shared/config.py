@@ -7,12 +7,9 @@ load_dotenv()
 # TODO: Create a free Groq account at https://console.groq.com to obtain your API key
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# Typhoon v2 — Primary Thai LLM by SCB10X
+# Typhoon v2 — Primary Thai LLM by SCB10X (local-dev/legacy provider only; not required
+# when LLM_PROVIDER=bedrock — see shared/typhoon_client.py for the actual provider switch).
 TYPHOON_API_KEY = os.getenv("TYPHOON_API_KEY")
-if not TYPHOON_API_KEY:
-    raise RuntimeError(
-        "TYPHOON_API_KEY is required. Register at https://typhoon.apps.opentyphoon.ai to obtain your API key."
-    )
 TYPHOON_BASE_URL = os.getenv("TYPHOON_BASE_URL", "https://api.opentyphoon.ai/v1")
 TYPHOON_MODEL = os.getenv("TYPHOON_MODEL", "typhoon-v2-70b-instruct")
 

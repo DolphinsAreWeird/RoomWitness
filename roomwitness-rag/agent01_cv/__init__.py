@@ -20,9 +20,12 @@ except ImportError:
 
 
 # ponytail: Groq retired its vision model (llama-4-scout) with no free-tier
-# replacement — routed to a local LM Studio VLM instead. Swap VLM_BASE_URL
-# back to a hosted vision API if/when one becomes available.
-def _get_client() -> OpenAI:
+# replacement. VLM_PROVIDER=bedrock (deployed) routes to Bedrock Converse via
+# the OpenAI-shaped adapter; local dev defaults to a local LM Studio VLM.
+def _get_client():
+    if os.getenv("VLM_PROVIDER") == "bedrock":
+        from shared.bedrock_vision_client import get_bedrock_vision_client
+        return get_bedrock_vision_client()
     return OpenAI(
         api_key=os.getenv("VLM_API_KEY", "lm-studio"),
         base_url=os.getenv("VLM_BASE_URL", "http://localhost:1234/v1"),

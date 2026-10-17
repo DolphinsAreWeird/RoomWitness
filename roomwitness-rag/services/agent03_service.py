@@ -19,6 +19,8 @@ from fastapi.responses import JSONResponse
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import JsonOutputParser
 
+from shared.typhoon_client import get_typhoon_llm
+
 # Make roomwitness-rag/ importable as a package root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -39,21 +41,12 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="RoomWitness Agent 03 — Legal Reasoning Bridge Service")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-TYPHOON_API_KEY = os.getenv("TYPHOON_API_KEY")
-TYPHOON_BASE_URL = os.getenv("TYPHOON_BASE_URL", "https://api.opentyphoon.ai/v1")
-TYPHOON_MODEL = os.getenv("TYPHOON_MODEL", "typhoon-v2-70b-instruct")
-
-
 def _get_llm() -> ChatOpenAI | None:
-    if not TYPHOON_API_KEY:
-        logger.warning("TYPHOON_API_KEY not set — verdicts will use fallback text")
+    try:
+        return get_typhoon_llm(temperature=0.1)
+    except Exception:
+        logger.warning("LLM client construction failed — verdicts will use fallback text", exc_info=True)
         return None
-    return ChatOpenAI(
-        api_key=TYPHOON_API_KEY,
-        base_url=TYPHOON_BASE_URL,
-        model=TYPHOON_MODEL,
-        temperature=0.1,
-    )
 
 
 @app.get("/health")

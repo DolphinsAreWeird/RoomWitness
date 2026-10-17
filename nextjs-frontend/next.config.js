@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone', // lean runtime image for container deployment
   // Local LLM/VLM backends are slower than the cloud APIs this proxy timeout
   // (default 30s) was tuned for — raised so a slow agent call doesn't 500.
   experimental: {

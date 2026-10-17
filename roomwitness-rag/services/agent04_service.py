@@ -26,6 +26,8 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
+from shared.typhoon_client import get_typhoon_llm
+
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
@@ -51,23 +53,29 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 OUTPUTS_DIR = Path(__file__).parent.parent / "outputs"
 OUTPUTS_DIR.mkdir(exist_ok=True)
 
-TYPHOON_API_KEY = os.getenv("TYPHOON_API_KEY")
-TYPHOON_BASE_URL = os.getenv("TYPHOON_BASE_URL", "https://api.opentyphoon.ai/v1")
-TYPHOON_MODEL   = os.getenv("TYPHOON_MODEL", "typhoon-v2-70b-instruct")
-
 # ── Fonts ──────────────────────────────────────────────────────────────────────
 
 _F_REG  = "ThaiReg"
 _F_BOLD = "ThaiBold"
+_FONTS_DIR = Path(__file__).parent / "fonts"
 
 def _register_fonts() -> tuple[str, str]:
-    try:
-        pdfmetrics.registerFont(TTFont(_F_REG,  r"C:\Windows\Fonts\leelawad.ttf"))
-        pdfmetrics.registerFont(TTFont(_F_BOLD, r"C:\Windows\Fonts\leelawdb.ttf"))
-        return _F_REG, _F_BOLD
-    except Exception as exc:
-        logger.warning("Thai font registration failed (%s) — falling back to Helvetica", exc)
-        return "Helvetica", "Helvetica-Bold"
+    # Portable path (bundled in the image/repo) first, Windows system font as a
+    # local-dev fallback for whoever still has it installed. Helvetica has no
+    # Thai glyphs — that fallback renders garbage, not an error, so it's last resort.
+    candidates = [
+        (_FONTS_DIR / "NotoSansThai-Regular.ttf", _FONTS_DIR / "NotoSansThai-Bold.ttf"),
+        (Path(r"C:\Windows\Fonts\leelawad.ttf"), Path(r"C:\Windows\Fonts\leelawdb.ttf")),
+    ]
+    for reg_path, bold_path in candidates:
+        try:
+            pdfmetrics.registerFont(TTFont(_F_REG, str(reg_path)))
+            pdfmetrics.registerFont(TTFont(_F_BOLD, str(bold_path)))
+            return _F_REG, _F_BOLD
+        except Exception:
+            continue
+    logger.warning("No Thai font found (tried %s) — falling back to Helvetica (no Thai glyphs)", candidates)
+    return "Helvetica", "Helvetica-Bold"
 
 FR, FB = _register_fonts()
 
@@ -228,15 +236,11 @@ _LLM_SECTIONS = {
 
 
 def _get_llm() -> ChatOpenAI | None:
-    if not TYPHOON_API_KEY:
-        logger.warning("TYPHOON_API_KEY not set — fallback text used")
+    try:
+        return get_typhoon_llm(temperature=0.05)
+    except Exception:
+        logger.warning("LLM client construction failed — fallback text used", exc_info=True)
         return None
-    return ChatOpenAI(
-        api_key=TYPHOON_API_KEY,
-        base_url=TYPHOON_BASE_URL,
-        model=TYPHOON_MODEL,
-        temperature=0.05,
-    )
 
 
 def _llm_text(doc_type: str, section_key: str, instruction: str, context: dict, llm: ChatOpenAI) -> str:
