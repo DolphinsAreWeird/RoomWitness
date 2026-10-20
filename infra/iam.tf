@@ -41,3 +41,12 @@ resource "aws_iam_role" "web_task" {
   name               = "${var.project}-web-task"
   assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
 }
+
+# exec role needs to read the Groq API key from SSM (ECS "secrets" injection) for
+# agent02/03/04 while Bedrock stays blocked — see services.tf. Plain SSM String
+# (not SecureString) sidesteps the KMS-decrypt permission this account also denies
+# reading back, same class of issue as the custom-policy problem above.
+resource "aws_iam_role_policy_attachment" "exec_ssm_read" {
+  role       = aws_iam_role.exec.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess"
+}

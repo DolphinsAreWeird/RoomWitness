@@ -1,27 +1,49 @@
 locals {
+  # LLM_PROVIDER=bedrock stays blocked (SCP + use-case gate, see Known gaps). Text
+  # agents (02/03/04) run on Groq instead until that clears — LLM_PROVIDER left
+  # unset routes shared/typhoon_client.py to its OpenAI-compatible branch, pointed
+  # at Groq via LLM_BASE_URL/LLM_MODEL instead of the localhost LM Studio default.
+  # Vision (agent01-cv + agent02's screenshot OCR, VLM_PROVIDER) stays on Bedrock —
+  # Groq retired its vision model and there's no other cloud fallback right now.
+  groq_env = {
+    LLM_BASE_URL = "https://api.groq.com/openai/v1"
+    LLM_MODEL    = "llama-3.3-70b-versatile"
+  }
+  groq_secrets = [
+    { name = "LLM_API_KEY", valueFrom = data.aws_ssm_parameter.groq_api_key.arn }
+  ]
+
   agents = {
     "agent01-cv" = {
-      port    = 8001
-      module  = "services.agent01_service:app"
-      extra_env = { VLM_PROVIDER = "bedrock" }
+      port          = 8001
+      module        = "services.agent01_service:app"
+      extra_env     = { VLM_PROVIDER = "bedrock" }
+      extra_secrets = []
     }
     "agent02-contract" = {
-      port    = 8002
-      module  = "services.agent02_service:app"
-      extra_env = { VLM_PROVIDER = "bedrock", LLM_PROVIDER = "bedrock" }
+      port          = 8002
+      module        = "services.agent02_service:app"
+      extra_env     = merge({ VLM_PROVIDER = "bedrock" }, local.groq_env)
+      extra_secrets = local.groq_secrets
     }
     "agent03-legal" = {
-      port    = 8003
-      module  = "services.agent03_service:app"
-      extra_env = { LLM_PROVIDER = "bedrock" }
+      port          = 8003
+      module        = "services.agent03_service:app"
+      extra_env     = local.groq_env
+      extra_secrets = local.groq_secrets
     }
     "agent04-docs" = {
-      port    = 8004
-      module  = "services.agent04_service:app"
-      extra_env = { LLM_PROVIDER = "bedrock" }
+      port          = 8004
+      module        = "services.agent04_service:app"
+      extra_env     = local.groq_env
+      extra_secrets = local.groq_secrets
     }
   }
   ns = "${var.project}.internal"
+}
+
+data "aws_ssm_parameter" "groq_api_key" {
+  name = "/roomwitness/groq_api_key"
 }
 
 resource "aws_ecs_task_definition" "agents" {

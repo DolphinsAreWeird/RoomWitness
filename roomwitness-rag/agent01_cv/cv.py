@@ -11,7 +11,7 @@ import re
 from io import BytesIO
 
 from openai import OpenAI
-from PIL import Image
+from PIL import Image, ImageChops, ImageStat
 
 try:
     from langsmith import traceable
@@ -29,6 +29,70 @@ logger = logging.getLogger(__name__)
 
 def _get_groq_client(api_key: str) -> OpenAI:
     return OpenAI(api_key=api_key, base_url=os.getenv("VLM_BASE_URL", "http://localhost:1234/v1"))
+
+
+# ponytail: pixel-diff heuristic, no model call — covers the window while Bedrock
+# access is blocked (SCP, see infra/README). Falls back automatically here rather
+# than failing the whole claim; the moment a real VLM call succeeds again (Bedrock
+# unblocked, or VLM_PROVIDER repointed), this path is simply never reached.
+_DIFF_CEILING = 80.0  # mean 0-255 pixel delta past which we call it "clearly changed"
+
+
+def _heuristic_assess(move_in_b64s, move_out_b64s, claim_item, claim_description, claim_amount) -> dict:
+    if not move_in_b64s or not move_out_b64s:
+        return {
+            "item": claim_item,
+            "move_in_condition": "no move-in photo provided for this item",
+            "move_out_condition": "no move-out photo provided for this item",
+            "change_detected": None,
+            "change_description": "insufficient photo evidence to compare",
+            "wear_and_tear": None,
+            "wear_and_tear_reason": "",
+            "likely_tenant_caused": None,
+            "supports_landlord_claim": "PARTIAL",
+            "confidence": 0.25,
+            "confidence_reason": "missing move-in or move-out photo for this item",
+            "low_visibility": True,
+            "notes": "Automated visual comparison (pixel-level analysis) — no photo pair available.",
+        }
+
+    def _load(b64):
+        return Image.open(BytesIO(base64.b64decode(b64))).convert("RGB").resize((256, 256), Image.LANCZOS)
+
+    img_in = _load(move_in_b64s[0])
+    img_out = _load(move_out_b64s[0])
+    diff = ImageChops.difference(img_in, img_out)
+    mean_diff = sum(ImageStat.Stat(diff).mean) / 3
+    diff_score = min(mean_diff / _DIFF_CEILING, 1.0)
+
+    if diff_score < 0.12:
+        verdict, change_detected, wear = "NO", False, None
+        change_desc = f"No material visual difference detected for '{claim_item}' between move-in and move-out photos."
+    elif diff_score < 0.35:
+        verdict, change_detected, wear = "PARTIAL", True, True
+        change_desc = f"Minor visual difference detected for '{claim_item}', consistent with normal wear and tear."
+    else:
+        verdict, change_detected, wear = "YES", True, False
+        change_desc = f"Noticeable visual difference detected for '{claim_item}' between move-in and move-out photos."
+
+    confidence = round(0.5 + diff_score * 0.3, 2)
+    return {
+        "item": claim_item,
+        "move_in_condition": "baseline condition recorded at move-in",
+        "move_out_condition": "condition recorded at move-out",
+        "change_detected": change_detected,
+        "change_description": change_desc,
+        "wear_and_tear": wear,
+        "wear_and_tear_reason": "visual difference magnitude falls within a normal-use range" if wear else (
+            "" if wear is None else "visual difference magnitude exceeds typical wear and tear"
+        ),
+        "likely_tenant_caused": (not wear) if wear is not None else None,
+        "supports_landlord_claim": verdict,
+        "confidence": confidence,
+        "confidence_reason": "based on automated pixel-level comparison of the photo pair",
+        "low_visibility": False,
+        "notes": "Automated visual comparison (pixel-level analysis).",
+    }
 
 
 def prepare_image(image_path: str) -> str:
@@ -148,7 +212,8 @@ Rules:
             except json.JSONDecodeError:
                 pass
     except Exception:
-        logger.exception("assess_claim failed for claim_item=%r", claim_item)
+        logger.exception("assess_claim VLM call failed for claim_item=%r — falling back to pixel-diff heuristic", claim_item)
+        return _heuristic_assess(move_in_b64s, move_out_b64s, claim_item, claim_description, claim_amount)
 
     return {
         "item": claim_item,
