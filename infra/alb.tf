@@ -4,6 +4,11 @@ resource "aws_lb" "this" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
   subnets            = data.aws_subnets.default.ids
+  # agent04 makes 6+ sequential Groq calls per doc set and can hit TPM rate
+  # limits — it retries with backoff and does succeed, but the default 60s
+  # ALB idle timeout was cutting the client off before the real response
+  # landed, serving an HTML gateway-timeout page instead of the finished JSON.
+  idle_timeout = 180
 }
 
 resource "aws_lb_target_group" "nextjs" {

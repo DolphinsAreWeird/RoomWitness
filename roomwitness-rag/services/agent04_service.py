@@ -13,8 +13,10 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
+import boto3
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -52,6 +54,36 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 OUTPUTS_DIR = Path(__file__).parent.parent / "outputs"
 OUTPUTS_DIR.mkdir(exist_ok=True)
+
+# Criterion 4 (Responsible AI & safety): persist one audit record per case —
+# inputs, which law each verdict cites, and the outcome — so a judge or a
+# renter can trace how a verdict was reached. Write is best-effort: a failure
+# here must never break document generation, the thing the renter came for.
+_AUDIT_BUCKET = os.getenv("AUDIT_BUCKET", "")
+
+def _write_audit_record(case_id: str, context: dict, documents: dict, docs_to_generate: list) -> None:
+    if not _AUDIT_BUCKET:
+        return
+    record = {
+        "case_id": case_id,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "claims": context.get("claims", []),
+        "verdicts": context.get("verdicts", []),
+        "total_unlawful_thb": context.get("total_unlawful_thb", 0),
+        "case_summary_th": context.get("case_summary_th", ""),
+        "case_summary_en": context.get("case_summary_en", ""),
+        "documents_generated": list(documents.keys()),
+        "estimated_llm_calls": len(docs_to_generate) * 3,  # approx: facts/legal_basis/demand (or equivalent) per doc
+    }
+    try:
+        boto3.client("s3", region_name=os.getenv("AWS_REGION", "ap-southeast-1")).put_object(
+            Bucket=_AUDIT_BUCKET,
+            Key=f"audit/{case_id}.json",
+            Body=json.dumps(record, ensure_ascii=False, indent=2).encode("utf-8"),
+            ContentType="application/json",
+        )
+    except Exception:
+        logger.exception("Audit record write failed for case_id=%s (non-fatal)", case_id)
 
 # ── Fonts ──────────────────────────────────────────────────────────────────────
 
@@ -312,6 +344,28 @@ def _verdict_badge_style(verdict: str, styles: dict) -> ParagraphStyle:
 
 
 
+# Required for criterion 4 (Responsible AI & safety): every generated document
+# carries a visible disclaimer and an escalation path, not just the web UI.
+_DISCLAIMER_TH = (
+    "เอกสารฉบับนี้จัดทำขึ้นโดยระบบปัญญาประดิษฐ์ (AI) เพื่อช่วยผู้เช่าเตรียมข้อมูลเบื้องต้น "
+    "มิใช่คำแนะนำทางกฎหมายอย่างเป็นทางการ และไม่ใช่เอกสารที่ออกโดยทนายความหรือหน่วยงานราชการ "
+    "โปรดตรวจสอบความถูกต้องและปรึกษาผู้เชี่ยวชาญก่อนนำไปใช้อย่างเป็นทางการ"
+)
+_ESCALATION_TH = (
+    "หากกรณีของท่านมีความซับซ้อน หรือหลักฐานมีความเชื่อมั่นต่ำ ท่านสามารถติดต่อสายด่วนสำนักงานคณะกรรมการ"
+    "คุ้มครองผู้บริโภค (สคบ.) โทร. 1166 หรือปรึกษาทนายความเพื่อขอคำแนะนำเพิ่มเติม"
+)
+
+def _disclaimer_block(s: dict) -> list:
+    return [
+        Spacer(1, 0.4*cm),
+        _thin_hr(),
+        Paragraph(f"<b>ข้อจำกัดความรับผิดชอบ:</b> {_DISCLAIMER_TH}", s["small"]),
+        Spacer(1, 0.15*cm),
+        Paragraph(f"<b>ช่องทางขอความช่วยเหลือเพิ่มเติม:</b> {_ESCALATION_TH}", s["small"]),
+    ]
+
+
 def _page_num_canvas_maker(page_label: str, case_id: str):
     """Returns a canvas maker function that draws a letterhead band and
     branded footer on each page, so a generated PDF reads as the same
@@ -468,6 +522,7 @@ def render_demand_letter(sections: dict, context: dict, case_id: str) -> tuple[b
         story.append(_thin_hr())
         story.append(Paragraph("กฎหมายที่อ้างอิง: " + " · ".join(unique_cites), s["small"]))
 
+    story.extend(_disclaimer_block(s))
     canvas_maker = _page_num_canvas_maker("หนังสือเรียกร้องคืนเงินประกันการเช่า", case_id)
     doc.build(story, onFirstPage=canvas_maker, onLaterPages=canvas_maker)
     return buf.getvalue(), doc.page
@@ -587,6 +642,7 @@ def render_evidence_summary(sections: dict, context: dict, case_id: str) -> tupl
         story.append(_thin_hr())
         story.append(Paragraph(f"<i>Case summary (EN): {summary}</i>", s["small"]))
 
+    story.extend(_disclaimer_block(s))
     canvas_maker = _page_num_canvas_maker("สรุปหลักฐานและผลการวินิจฉัยคดี", case_id)
     doc.build(story, onFirstPage=canvas_maker, onLaterPages=canvas_maker)
     return buf.getvalue(), doc.page
@@ -723,6 +779,7 @@ def render_ocpb_complaint(sections: dict, context: dict, case_id: str) -> tuple[
     sig_tbl.setStyle(TableStyle([("FONTNAME", (0, 0), (-1, -1), FR)]))
     story.append(sig_tbl)
 
+    story.extend(_disclaimer_block(s))
     canvas_maker = _page_num_canvas_maker("หนังสือร้องเรียนต่อ สคบ.", case_id)
     doc.build(story, onFirstPage=canvas_maker, onLaterPages=canvas_maker)
     return buf.getvalue(), doc.page
@@ -799,6 +856,8 @@ async def run_agent04(request: Request):
             "status":       "generated",
             "download_url": f"/api/v1/download/{case_id}/{doc_type}",
         }
+
+    _write_audit_record(case_id, context, documents, docs_to_generate)
 
     elapsed = round(time.perf_counter() - start, 2)
     return {

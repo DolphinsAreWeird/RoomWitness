@@ -358,6 +358,20 @@ button[type="submit"]:disabled { background: var(--border); color: var(--muted);
 
 #pipeline { max-width: 780px; margin: 0 auto; padding: 0 1.25rem 3rem; }
 
+.disclaimer-banner {
+  background: var(--amber-bg, #fdf6e8); border: 1px solid var(--amber-dark, #c08a1e);
+  border-radius: 8px; padding: .75rem 1rem; margin-bottom: 1rem;
+  font-size: .8rem; line-height: 1.5; color: var(--text);
+}
+.disclaimer-banner .disclaimer-en { display: block; margin-top: .25rem; color: var(--muted); }
+
+.privacy-note {
+  font-size: .78rem; line-height: 1.5; color: var(--muted);
+  background: var(--panel, #f7f7f8); border: 1px solid var(--border); border-radius: 8px;
+  padding: .7rem .9rem; margin-top: .9rem;
+}
+.privacy-note-en { display: block; margin-top: .2rem; opacity: .85; }
+
 .pip-bar { display:flex; align-items:center; justify-content:center; gap:8px; padding:20px 0 14px; flex-wrap:wrap; }
 .pip-step { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:var(--muted); transition:color .3s; }
 .pip-dot  { width:10px; height:10px; border-radius:50%; background:var(--border); transition:background .3s; }

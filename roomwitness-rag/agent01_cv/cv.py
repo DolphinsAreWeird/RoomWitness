@@ -38,7 +38,7 @@ def _get_groq_client(api_key: str) -> OpenAI:
 _DIFF_CEILING = 80.0  # mean 0-255 pixel delta past which we call it "clearly changed"
 
 
-def _heuristic_assess(move_in_b64s, move_out_b64s, claim_item, claim_description, claim_amount) -> dict:
+def _heuristic_assess_inner(move_in_b64s, move_out_b64s, claim_item, claim_description, claim_amount) -> dict:
     if not move_in_b64s or not move_out_b64s:
         return {
             "item": claim_item,
@@ -50,10 +50,10 @@ def _heuristic_assess(move_in_b64s, move_out_b64s, claim_item, claim_description
             "wear_and_tear_reason": "",
             "likely_tenant_caused": None,
             "supports_landlord_claim": "PARTIAL",
-            "confidence": 0.25,
+            "confidence": 0.2,
             "confidence_reason": "missing move-in or move-out photo for this item",
             "low_visibility": True,
-            "notes": "Automated visual comparison (pixel-level analysis) — no photo pair available.",
+            "notes": "Automated pixel-level pre-screen — no photo pair available. Requires manual review.",
         }
 
     def _load(b64):
@@ -65,34 +65,57 @@ def _heuristic_assess(move_in_b64s, move_out_b64s, claim_item, claim_description
     mean_diff = sum(ImageStat.Stat(diff).mean) / 3
     diff_score = min(mean_diff / _DIFF_CEILING, 1.0)
 
+    # Pixel deltas alone can't adjudicate fault or legal classification — a
+    # lighting change or camera-angle shift produces the same signal as real
+    # damage. This is a pre-screen for a human/manual-review step, not a
+    # verdict: always PARTIAL, never asserts who's at fault, never claims full
+    # visibility. Downstream (agent03 legal reasoning, generated documents)
+    # must not treat this as a confident finding.
     if diff_score < 0.12:
-        verdict, change_detected, wear = "NO", False, None
+        change_detected = False
         change_desc = f"No material visual difference detected for '{claim_item}' between move-in and move-out photos."
-    elif diff_score < 0.35:
-        verdict, change_detected, wear = "PARTIAL", True, True
-        change_desc = f"Minor visual difference detected for '{claim_item}', consistent with normal wear and tear."
     else:
-        verdict, change_detected, wear = "YES", True, False
-        change_desc = f"Noticeable visual difference detected for '{claim_item}' between move-in and move-out photos."
+        change_detected = True
+        change_desc = f"Some visual difference detected for '{claim_item}' between move-in and move-out photos — magnitude and cause undetermined."
 
-    confidence = round(0.5 + diff_score * 0.3, 2)
+    confidence = round(0.25 + diff_score * 0.15, 2)  # capped low — this is a screen, not a judgment
     return {
         "item": claim_item,
         "move_in_condition": "baseline condition recorded at move-in",
         "move_out_condition": "condition recorded at move-out",
         "change_detected": change_detected,
         "change_description": change_desc,
-        "wear_and_tear": wear,
-        "wear_and_tear_reason": "visual difference magnitude falls within a normal-use range" if wear else (
-            "" if wear is None else "visual difference magnitude exceeds typical wear and tear"
-        ),
-        "likely_tenant_caused": (not wear) if wear is not None else None,
-        "supports_landlord_claim": verdict,
+        "wear_and_tear": None,
+        "wear_and_tear_reason": "cannot be determined from automated pixel comparison alone",
+        "likely_tenant_caused": None,
+        "supports_landlord_claim": "PARTIAL",
         "confidence": confidence,
-        "confidence_reason": "based on automated pixel-level comparison of the photo pair",
-        "low_visibility": False,
-        "notes": "Automated visual comparison (pixel-level analysis).",
+        "confidence_reason": "automated pixel-level pre-screen only — not a substantive assessment",
+        "low_visibility": True,
+        "notes": "Automated pixel-level pre-screen (no vision model available). Requires manual review before relying on this claim.",
     }
+
+
+def _heuristic_assess(move_in_b64s, move_out_b64s, claim_item, claim_description, claim_amount) -> dict:
+    try:
+        return _heuristic_assess_inner(move_in_b64s, move_out_b64s, claim_item, claim_description, claim_amount)
+    except Exception:
+        logger.exception("pixel-diff heuristic failed for claim_item=%r", claim_item)
+        return {
+            "item": claim_item,
+            "move_in_condition": "assessment failed",
+            "move_out_condition": "assessment failed",
+            "change_detected": None,
+            "change_description": "could not assess",
+            "wear_and_tear": None,
+            "wear_and_tear_reason": "",
+            "likely_tenant_caused": None,
+            "supports_landlord_claim": "PARTIAL",
+            "confidence": 0.0,
+            "confidence_reason": "both the VLM call and the pixel-diff fallback failed",
+            "low_visibility": True,
+            "notes": "assessment failed — manual review required",
+        }
 
 
 def prepare_image(image_path: str) -> str:

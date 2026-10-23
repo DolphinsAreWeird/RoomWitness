@@ -105,6 +105,13 @@ export default function Pipeline({ steps, results, moveInPreviews, moveOutPrevie
         <h2>{allDone ? 'ผลการวิเคราะห์ของคุณ' : 'กำลังตรวจสอบหลักฐานของคุณ'}</h2>
         <p>{allDone ? 'Your case assessment' : 'Evidence review · Live analysis progress'}</p>
       </div>
+      <div className="disclaimer-banner" role="note">
+        <strong>ข้อจำกัดความรับผิดชอบ · Disclaimer:</strong>{' '}
+        ผลวิเคราะห์นี้จัดทำโดย AI เพื่อช่วยเตรียมข้อมูลเบื้องต้น ไม่ใช่คำแนะนำทางกฎหมายอย่างเป็นทางการ
+        หากกรณีซับซ้อนหรือความเชื่อมั่นต่ำ โปรดติดต่อสายด่วน สคบ. 1166 หรือทนายความ.{' '}
+        <span className="disclaimer-en">This is AI-assisted guidance, not formal legal advice. For complex or
+        low-confidence cases, contact the OCPB hotline (1166) or a lawyer.</span>
+      </div>
       {results.agent03 && <nav className="assessment-nav" aria-label="Assessment sections">
         <a href="#assessment-3">ผลวินิจฉัย<small>Claim verdicts</small></a>
         <a href="#assessment-1">หลักฐานภาพถ่าย<small>Photo evidence</small></a>
@@ -147,7 +154,7 @@ export default function Pipeline({ steps, results, moveInPreviews, moveOutPrevie
       )}
 
       {/* Agent 01 */}
-      <AgentCard n={1} titleTh="ตรวจสอบความเสียหายด้วย AI" title="CV Damage Assessment" subtitle="Groq Llama-4-Scout · ภาพถ่ายเปรียบเทียบ" colorClass="a01" state={s1}>
+      <AgentCard n={1} titleTh="ตรวจสอบความเสียหายด้วย AI" title="CV Damage Assessment" subtitle="AI Vision Model · ภาพถ่ายเปรียบเทียบ" colorClass="a01" state={s1}>
         {/* Photo strip — shown once, not per claim */}
         {(moveInPreviews.length > 0 || moveOutPreviews.length > 0) && (
           <div className="cv-photo-strip">

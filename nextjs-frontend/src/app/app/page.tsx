@@ -368,7 +368,17 @@ export default function AppPage() {
         <main className="wiz-body">
           <div className="case-editor">
           {/* ── Step 0: Claims ─────────────────────────── */}
-          {step === 0 && <ClaimsList claims={claims} onChange={setClaims} />}
+          {step === 0 && (
+            <>
+              <ClaimsList claims={claims} onChange={setClaims} />
+              <p className="privacy-note">
+                🔒 รูปภาพ สัญญาเช่า และข้อความที่คุณอัปโหลดใช้เพื่อประมวลผลคดีของคุณเท่านั้น ไม่เปิดเผยต่อบุคคลที่สาม
+                ระบบเก็บบันทึกสรุปผลวิเคราะห์ (ไม่รวมภาพต้นฉบับ) ไว้ 90 วันเพื่อการตรวจสอบย้อนหลัง
+                <br />
+                <span className="privacy-note-en">Your photos, lease, and messages are used only to process your case and are never shared with third parties. A summary record (not original photos) is kept for 90 days for audit purposes.</span>
+              </p>
+            </>
+          )}
 
           {/* ── Step 1: Photos ─────────────────────────── */}
           {step === 1 && (

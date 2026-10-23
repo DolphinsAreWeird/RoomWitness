@@ -7,24 +7,36 @@ locals {
   # Groq retired its vision model and there's no other cloud fallback right now.
   groq_env = {
     LLM_BASE_URL = "https://api.groq.com/openai/v1"
-    LLM_MODEL    = "llama-3.3-70b-versatile"
+    LLM_MODEL    = "openai/gpt-oss-120b"
   }
   groq_secrets = [
     { name = "LLM_API_KEY", valueFrom = data.aws_ssm_parameter.groq_api_key.arn }
+  ]
+
+  # VLM_PROVIDER=gemini — round-robins GEMINI_API_KEYS (comma-separated) across
+  # requests so one rate-limited free-tier key doesn't stall the whole demo.
+  # See agent01_cv/__init__.py::_get_client. Bedrock stays the long-term target;
+  # this is a stopgap for the SCP block (see Known gaps in the architecture doc).
+  gemini_env = {
+    VLM_PROVIDER = "gemini"
+    VLM_MODEL    = "gemini-3.5-flash"
+  }
+  gemini_secrets = [
+    { name = "GEMINI_API_KEYS", valueFrom = data.aws_ssm_parameter.gemini_api_keys.arn }
   ]
 
   agents = {
     "agent01-cv" = {
       port          = 8001
       module        = "services.agent01_service:app"
-      extra_env     = { VLM_PROVIDER = "bedrock" }
-      extra_secrets = []
+      extra_env     = local.gemini_env
+      extra_secrets = local.gemini_secrets
     }
     "agent02-contract" = {
       port          = 8002
       module        = "services.agent02_service:app"
-      extra_env     = merge({ VLM_PROVIDER = "bedrock" }, local.groq_env)
-      extra_secrets = local.groq_secrets
+      extra_env     = merge(local.gemini_env, local.groq_env)
+      extra_secrets = concat(local.gemini_secrets, local.groq_secrets)
     }
     "agent03-legal" = {
       port          = 8003
@@ -35,7 +47,7 @@ locals {
     "agent04-docs" = {
       port          = 8004
       module        = "services.agent04_service:app"
-      extra_env     = local.groq_env
+      extra_env     = merge(local.groq_env, { AUDIT_BUCKET = aws_s3_bucket.audit.bucket })
       extra_secrets = local.groq_secrets
     }
   }
@@ -44,6 +56,10 @@ locals {
 
 data "aws_ssm_parameter" "groq_api_key" {
   name = "/roomwitness/groq_api_key"
+}
+
+data "aws_ssm_parameter" "gemini_api_keys" {
+  name = "/roomwitness/gemini_api_keys"
 }
 
 resource "aws_ecs_task_definition" "agents" {
@@ -69,6 +85,7 @@ resource "aws_ecs_task_definition" "agents" {
       { name = "AWS_REGION", value = var.aws_region },
       { name = "BEDROCK_MODEL_ID", value = var.bedrock_model_id },
     ], [for k, v in each.value.extra_env : { name = k, value = v }])
+    secrets = each.value.extra_secrets
     logConfiguration = {
       logDriver = "awslogs"
       options = {
