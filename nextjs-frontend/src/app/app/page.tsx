@@ -7,7 +7,7 @@ import ClaimsList from '@/components/ClaimsList';
 import Pipeline from '@/components/Pipeline';
 import { Claim, PipelineResults, StepState } from '@/types';
 import { getMoveInRecords, dataUrlToFile, MoveInRecord } from '@/lib/moveInVault';
-import { CameraIcon, FileTextIcon, ScaleIcon, StackIcon, LockIcon } from '@/components/icons';
+import { ScaleIcon } from '@/components/icons';
 
 const IDLE_STEPS: StepState[] = ['idle', 'idle', 'idle', 'idle'];
 
@@ -18,15 +18,6 @@ const WIZ_STEPS = [
   { headline: 'เพิ่มหลักฐานประกอบ', sub: 'Supporting evidence · Contract and messages (optional)', accent: 'var(--green)' },
   { headline: 'ตรวจสอบข้อมูลก่อนวิเคราะห์', sub: 'Review your case · Before AI analysis', accent: 'var(--purple)' },
 ];
-
-// Line items sum to the flat ฿99 charged once per claim — metered like a real API bill.
-const LINE_ITEMS = [
-  { Icon: CameraIcon, label: 'เปรียบเทียบภาพถ่าย', sub: 'Photo comparison · Move-in vs move-out', price: 25 },
-  { Icon: FileTextIcon, label: 'ตรวจข้อสัญญาเช่า', sub: 'Contract review · Lease text extraction', price: 20 },
-  { Icon: ScaleIcon, label: 'วิเคราะห์ข้อกฎหมาย', sub: 'Legal assessment · ป.พ.พ. + สคบ.', price: 24 },
-  { Icon: StackIcon, label: 'จัดทำเอกสารภาษาไทย', sub: 'Document generation · 3 Thai documents', price: 30 },
-];
-const TOTAL_PRICE = LINE_ITEMS.reduce((s, i) => s + i.price, 0);
 
 export default function AppPage() {
   // ── Form state ──────────────────────────────────────────────────
@@ -69,12 +60,9 @@ export default function AppPage() {
   // ── Wizard step ─────────────────────────────────────────────────
   const [step, setStep] = useState(0);
 
-  // ── Move-in vault (free, saved earlier) + paywall (paid claim step) ──
+  // ── Move-in vault (saved earlier) ──
   const [moveInRecords, setMoveInRecords] = useState<MoveInRecord[]>([]);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
-  const [unlockedClaim, setUnlockedClaim] = useState(false);
-  const [showPaywall, setShowPaywall] = useState(false);
-  const [paying, setPaying] = useState(false);
 
   useEffect(() => {
     const records = getMoveInRecords();
@@ -204,20 +192,7 @@ export default function AppPage() {
   function requestAnalysis() {
     if (!validClaims.length) { setError('Add at least one claim.'); return; }
     setError(null);
-    // Upload + claim entry are free; running the AI + generating documents is the paid step.
-    if (!unlockedClaim) { setShowPaywall(true); return; }
     runPipeline(validClaims);
-  }
-
-  function pay() {
-    setPaying(true);
-    // No real payment provider wired up yet — demo stand-in for the metered, pay-per-claim gate.
-    setTimeout(() => {
-      setPaying(false);
-      setUnlockedClaim(true);
-      setShowPaywall(false);
-      runPipeline(validClaims);
-    }, 900);
   }
 
   const runPipeline = async (validClaims: Claim[]) => {
@@ -326,43 +301,6 @@ export default function AppPage() {
 
   const totalCharged = claims.reduce((s, c) => s + (c.amount_thb || 0), 0);
   const s = WIZ_STEPS[step];
-
-  // ── Paywall (invoice-style, own screen — like the mobile app's /paywall) ──
-  if (showPaywall) {
-    return (
-      <>
-        <header><div className="header-inner"><div><h1>RoomWitness</h1></div></div></header>
-        <div className="paywall-wrap">
-          <button className="wiz-back" onClick={() => setShowPaywall(false)} style={{ marginBottom: 20 }}>← ย้อนกลับ · Back</button>
-          <div className="paywall-lock"><LockIcon size={26} color="var(--amber-dark)" /></div>
-          <div className="paywall-title">เตรียมเอกสารเพื่อเรียกคืนเงินประกัน<span className="h2-en">Prepare your deposit claim</span></div>
-          <p className="paywall-sub">
-            บันทึกรูปและกรอกรายการได้ฟรี ชำระครั้งเดียวเพื่อวิเคราะห์และสร้างเอกสาร<br />
-            One payment for AI analysis and document generation.
-          </p>
-          <div className="invoice-card">
-            <div className="invoice-meta">
-              <span>{validClaims.length} claim{validClaims.length !== 1 ? 's' : ''} · ฿{totalCharged.toLocaleString()} disputed</span>
-              <em>ชำระครั้งเดียว · One-time</em>
-            </div>
-            <div className="invoice-total">฿{TOTAL_PRICE}</div>
-            {LINE_ITEMS.map((f, i) => (
-              <div key={i} className="invoice-line">
-                <div className="invoice-line-icon"><f.Icon size={14} color="var(--green)" /></div>
-                <div className="invoice-line-text"><b>{f.label}</b><span>{f.sub}</span></div>
-                <div className="invoice-line-price">฿{f.price}</div>
-              </div>
-            ))}
-            <div className="invoice-total-row"><span>ยอดชำระครั้งเดียว · Total</span><span>฿{TOTAL_PRICE}</span></div>
-          </div>
-          <button className="paywall-pay-btn" onClick={pay} disabled={paying}>
-            {paying ? 'กำลังดำเนินการ · Processing…' : `ชำระ ฿${TOTAL_PRICE} และวิเคราะห์ · Pay & analyze`}
-          </button>
-          <button className="paywall-cancel" onClick={() => setShowPaywall(false)}>ยกเลิก · Cancel</button>
-        </div>
-      </>
-    );
-  }
 
   return (
     <>
@@ -609,7 +547,7 @@ export default function AppPage() {
                 'Check the amounts and evidence. You can edit each section before analysis.',
               ][step]}</small>
             </div>
-            <div className="brief-price">วิเคราะห์และจัดทำเอกสาร <b>฿{TOTAL_PRICE}</b><small>Analysis & documents · One-time payment</small></div>
+            <div className="brief-price">วิเคราะห์และจัดทำเอกสาร <b>ฟรี</b><small>Analysis & documents · Free</small></div>
           </aside>
         </main>
 
