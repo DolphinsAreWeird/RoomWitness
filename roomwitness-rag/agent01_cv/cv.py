@@ -22,7 +22,15 @@ except ImportError:
 
 # Groq retired llama-4-scout (2026-07-17) with no vision model left on this
 # tier — routed to a local LM Studio VLM instead (see agent01_cv/__init__.py).
-MODEL = os.getenv("VLM_MODEL", "qwen/qwen2.5-vl-7b")
+# Reported model_used must reflect what actually served the request — the
+# Bedrock adapter ignores this `model` param client-side (it already has its
+# own model_id), so this was previously always the local-dev default even
+# when Bedrock served the call.
+MODEL = (
+    os.getenv("BEDROCK_MODEL_ID", "")
+    if os.getenv("VLM_PROVIDER") == "bedrock"
+    else os.getenv("VLM_MODEL", "qwen/qwen2.5-vl-7b")
+)
 
 logger = logging.getLogger(__name__)
 

@@ -85,9 +85,12 @@ interface Props {
   moveInPreviews:  string[];
   moveOutPreviews: string[];
   depositAmount?: string;
+  awaitingDocApproval?: boolean;
+  generatingDocs?: boolean;
+  onApproveDocs?: () => void;
 }
 
-export default function Pipeline({ steps, results, moveInPreviews, moveOutPreviews, depositAmount }: Props) {
+export default function Pipeline({ steps, results, moveInPreviews, moveOutPreviews, depositAmount, awaitingDocApproval, generatingDocs, onApproveDocs }: Props) {
   const [s1, s2, s3, s4] = steps;
   const allDone = steps.every(s => s === 'done');
 
@@ -320,8 +323,23 @@ export default function Pipeline({ steps, results, moveInPreviews, moveOutPrevie
         })()}
       </AgentCard>
 
+      {/* Responsible AI: explicit tenant approval before any document is generated */}
+      {awaitingDocApproval && (
+        <div className="approval-gate" role="region" aria-label="Document generation approval">
+          <h4>ยืนยันก่อนสร้างเอกสาร <span className="lbl-en">Approve before generating documents</span></h4>
+          <p>
+            โปรดตรวจสอบผลวินิจฉัยด้านบนก่อนให้ AI สร้างเอกสารกฎหมายทั้ง 3 ฉบับ
+            <br />
+            <span className="approval-en">Please review the legal verdicts above before AI generates your 3 legal documents.</span>
+          </p>
+          <button type="button" className="btn-approve" onClick={onApproveDocs} disabled={generatingDocs}>
+            {generatingDocs ? 'กำลังสร้างเอกสาร… · Generating…' : 'อนุมัติและสร้างเอกสาร · Approve & generate'}
+          </button>
+        </div>
+      )}
+
       {/* Agent 04 */}
-      <AgentCard n={4} titleTh="สร้างเอกสารกฎหมาย" title="Document Generator" subtitle="Typhoon v2 · ReportLab" colorClass="a04" state={s4}>
+      <AgentCard n={4} titleTh="สร้างเอกสารกฎหมาย" title="Document Generator" subtitle="AI Document Generator · ReportLab" colorClass="a04" state={s4}>
         {results.agent04 && (() => {
           const d = results.agent04!;
           return (

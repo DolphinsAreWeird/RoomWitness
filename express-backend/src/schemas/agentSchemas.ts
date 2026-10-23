@@ -42,6 +42,10 @@ export const agent04BodySchema = z.object({
   case_summary_th:       z.string().optional().default(''),
   case_summary_en:       z.string().optional().default(''),
   claims:                z.array(z.unknown()).optional().default([]),
+  // Responsible AI: tenant must explicitly approve before documents are
+  // generated. Agent 04 itself enforces this (400 if missing) — this schema
+  // just has to stop zod from silently stripping the field before it forwards.
+  approved_by_tenant:    z.boolean().optional().default(false),
 });
 
 // POST /generate-documents — JSON body (extra client fields like tenant/landlord

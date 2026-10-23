@@ -805,6 +805,12 @@ def health():
 async def run_agent04(request: Request):
     data = await request.json()
 
+    # Responsible AI: documents are only generated once the tenant has
+    # reviewed the legal verdicts and explicitly approved (enforced here, not
+    # just gated in the UI — a direct API call without approval is rejected).
+    if data.get("approved_by_tenant") is not True:
+        raise HTTPException(status_code=400, detail="approved_by_tenant must be true to generate documents")
+
     docs_to_generate: list[str] = data.get("documents_to_generate", ["demand_letter", "evidence_summary"])
     total_unlawful: float       = float(data.get("total_unlawful_thb", 0))
     verdicts: list              = data.get("verdicts", [])

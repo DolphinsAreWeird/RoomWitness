@@ -59,6 +59,12 @@ export default function AppPage() {
   const [showPipeline, setShowPipeline] = useState(false);
   const [steps,   setSteps]   = useState<StepState[]>(IDLE_STEPS);
   const [results, setResults] = useState<PipelineResults>({});
+  // Responsible AI: tenant reviews the legal verdicts and explicitly approves
+  // before any document is generated — a distinct checkpoint, not folded into
+  // the earlier pay/run confirmation.
+  const [awaitingDocApproval, setAwaitingDocApproval] = useState(false);
+  const [pendingDocArgs, setPendingDocArgs] = useState<{ claims: Claim[]; d3: any } | null>(null);
+  const [generatingDocs, setGeneratingDocs] = useState(false);
 
   // ── Wizard step ─────────────────────────────────────────────────
   const [step, setStep] = useState(0);
@@ -268,7 +274,25 @@ export default function AppPage() {
       setResults(prev => ({ ...prev, agent03: d3 }));
       setStepState(2, 'done');
 
-      setStepState(3, 'active');
+      // Pause here: the tenant sees the legal verdicts and must explicitly
+      // approve before any document is generated (step 4 waits for approveDocs()).
+      setPendingDocArgs({ claims: validClaims, d3 });
+      setAwaitingDocApproval(true);
+
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const approveDocs = async () => {
+    if (!pendingDocArgs) return;
+    const { claims: validClaims, d3 } = pendingDocArgs;
+    setAwaitingDocApproval(false);
+    setGeneratingDocs(true);
+    setStepState(3, 'active');
+    try {
       const d4 = await fetch('/run/agent04', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -279,16 +303,17 @@ export default function AppPage() {
           case_summary_th:       d3.case_summary_th ?? '',
           case_summary_en:       d3.case_summary_en ?? '',
           claims:                validClaims,
+          approved_by_tenant:    true,
         }),
       }).then(r => r.json());
       if (d4.error) throw new Error(`Agent 04: ${d4.error}`);
       setResults(prev => ({ ...prev, agent04: d4 }));
       setStepState(3, 'done');
-
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setRunning(false);
+      setGeneratingDocs(false);
+      setPendingDocArgs(null);
     }
   };
 
@@ -617,6 +642,9 @@ export default function AppPage() {
           moveInPreviews={moveInPrevs}
           moveOutPreviews={moveOutPrevs}
           depositAmount={depositAmount}
+          awaitingDocApproval={awaitingDocApproval}
+          generatingDocs={generatingDocs}
+          onApproveDocs={approveDocs}
         />
         </>
       )}

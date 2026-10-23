@@ -1,26 +1,22 @@
 locals {
-  # LLM_PROVIDER=bedrock stays blocked (SCP + use-case gate, see Known gaps). Text
-  # agents (02/03/04) run on Groq instead until that clears — LLM_PROVIDER left
-  # unset routes shared/typhoon_client.py to its OpenAI-compatible branch, pointed
-  # at Groq via LLM_BASE_URL/LLM_MODEL instead of the localhost LM Studio default.
-  # Vision (agent01-cv + agent02's screenshot OCR, VLM_PROVIDER) stays on Bedrock —
-  # Groq retired its vision model and there's no other cloud fallback right now.
-  groq_env = {
-    LLM_BASE_URL = "https://api.groq.com/openai/v1"
-    LLM_MODEL    = "openai/gpt-oss-120b"
+  # NTT rule: AI must run on Bedrock — Groq/Typhoon are not allowed (see
+  # docs/NTT_official_requirements.md and docs/handoff_tuey.md). The earlier
+  # blanket SCP deny on bedrock:InvokeModel only ever covered native models;
+  # retested 2026-10-24 and Amazon Nova now invokes successfully (text +
+  # vision, confirmed live). Anthropic models remain blocked separately —
+  # that path routes through an AWS Marketplace subscription this account's
+  # role isn't authorized for (matches "Marketplace is blocked" in the
+  # onboarding rules) — so Nova, not Claude, is the compliant model family
+  # here. Groq/Gemini wiring (data sources below, unreferenced) is left
+  # in place only as a last-resort manual fallback, not for normal use.
+  bedrock_env = {
+    VLM_PROVIDER = "bedrock"
+    LLM_PROVIDER = "bedrock"
   }
+
   groq_secrets = [
     { name = "LLM_API_KEY", valueFrom = data.aws_ssm_parameter.groq_api_key.arn }
   ]
-
-  # VLM_PROVIDER=gemini — round-robins GEMINI_API_KEYS (comma-separated) across
-  # requests so one rate-limited free-tier key doesn't stall the whole demo.
-  # See agent01_cv/__init__.py::_get_client. Bedrock stays the long-term target;
-  # this is a stopgap for the SCP block (see Known gaps in the architecture doc).
-  gemini_env = {
-    VLM_PROVIDER = "gemini"
-    VLM_MODEL    = "gemini-3.5-flash"
-  }
   gemini_secrets = [
     { name = "GEMINI_API_KEYS", valueFrom = data.aws_ssm_parameter.gemini_api_keys.arn }
   ]
@@ -29,26 +25,26 @@ locals {
     "agent01-cv" = {
       port          = 8001
       module        = "services.agent01_service:app"
-      extra_env     = local.gemini_env
-      extra_secrets = local.gemini_secrets
+      extra_env     = local.bedrock_env
+      extra_secrets = []
     }
     "agent02-contract" = {
       port          = 8002
       module        = "services.agent02_service:app"
-      extra_env     = merge(local.gemini_env, local.groq_env)
-      extra_secrets = concat(local.gemini_secrets, local.groq_secrets)
+      extra_env     = local.bedrock_env
+      extra_secrets = []
     }
     "agent03-legal" = {
       port          = 8003
       module        = "services.agent03_service:app"
-      extra_env     = local.groq_env
-      extra_secrets = local.groq_secrets
+      extra_env     = local.bedrock_env
+      extra_secrets = []
     }
     "agent04-docs" = {
       port          = 8004
       module        = "services.agent04_service:app"
-      extra_env     = merge(local.groq_env, { AUDIT_BUCKET = aws_s3_bucket.audit.bucket })
-      extra_secrets = local.groq_secrets
+      extra_env     = merge(local.bedrock_env, { AUDIT_BUCKET = aws_s3_bucket.audit.bucket })
+      extra_secrets = []
     }
   }
   ns = "${var.project}.internal"
