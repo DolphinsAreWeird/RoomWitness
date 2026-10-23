@@ -54,15 +54,23 @@ resource "aws_security_group_rule" "services_self_ingress" {
   source_security_group_id = aws_security_group.services.id
 }
 
+# CloudFront is the only intended public entry point (see cloudfront.tf) — the
+# ALB itself accepts ingress only from CloudFront's own edge IP range, not
+# 0.0.0.0/0, so the plain-HTTP origin hop never touches the public internet
+# and hitting the ALB's DNS name directly no longer works.
+data "aws_ec2_managed_prefix_list" "cloudfront_origin_facing" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
 resource "aws_security_group" "alb" {
   name_prefix = "${var.project}-alb-"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 80
+    to_port          = 80
+    protocol         = "tcp"
+    prefix_list_ids  = [data.aws_ec2_managed_prefix_list.cloudfront_origin_facing.id]
   }
   egress {
     from_port   = 0
