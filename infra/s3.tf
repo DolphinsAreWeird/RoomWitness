@@ -17,16 +17,45 @@ resource "aws_s3_bucket_public_access_block" "audit" {
   restrict_public_buckets = true
 }
 
+# Matches the UI's own privacy-note claim ("kept 90 days") — the retention
+# promise shown to renters is now actually enforced, not just stated.
+resource "aws_s3_bucket_lifecycle_configuration" "audit" {
+  bucket = aws_s3_bucket.audit.id
+  rule {
+    id     = "expire-after-90-days"
+    status = "Enabled"
+    filter {
+      prefix = "audit/"
+    }
+    expiration {
+      days = 90
+    }
+  }
+}
+
 resource "aws_s3_bucket_policy" "audit" {
   bucket = aws_s3_bucket.audit.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Sid       = "AgentsTaskWriteAudit"
-      Effect    = "Allow"
-      Principal = { AWS = aws_iam_role.agents_task.arn }
-      Action    = ["s3:PutObject", "s3:GetObject"]
-      Resource  = "${aws_s3_bucket.audit.arn}/*"
-    }]
+    Statement = [
+      {
+        # PutObject only — agent04 writes these and nothing currently reads
+        # them back (least privilege). Scoped to the audit/ prefix, the only
+        # one this bucket is used for.
+        Sid       = "AgentsTaskWriteAudit"
+        Effect    = "Allow"
+        Principal = { AWS = aws_iam_role.agents_task.arn }
+        Action    = ["s3:PutObject"]
+        Resource  = "${aws_s3_bucket.audit.arn}/audit/*"
+      },
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource  = [aws_s3_bucket.audit.arn, "${aws_s3_bucket.audit.arn}/*"]
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      }
+    ]
   })
 }
