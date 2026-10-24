@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Claim, ClaimVerdict, PipelineResults, StepState } from '@/types';
 import { Disclaimer, ShortDisclaimer } from '@/components/Disclaimer';
+import DocPreview from '@/components/DocPreview';
 import {
   ChevronGlyph, DisputedGlyph, DocGlyph, DownloadGlyph, LawfulGlyph, StepDoneGlyph, StepFailGlyph,
   StepIdleGlyph, StepNowGlyph, StepSkipGlyph, UnlawfulGlyph,
@@ -228,6 +229,9 @@ export default function Pipeline({
     : mode === 'docs' ? `เคส · Case ${d4!.case_id}`
     : `ขั้น ${stepNo} จาก 5 · Step ${stepNo} of 5`;
 
+  // The generated document open in the in-page viewer, if any.
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
+
   // Scroll to and focus the heading of each new decision state.
   const h1Ref = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -324,6 +328,12 @@ export default function Pipeline({
                 <div className="rw-rt">{name.th}</div>
                 <div className="rw-rd"><span lang="en">{name.en}</span> · PDF · {doc.pages} หน้า · {doc.pages} page{doc.pages !== 1 ? 's' : ''}</div>
                 {key === 'ocpb_complaint' && <div className="rw-rd">{OCPB_UNITS_NOTE.th} <span lang="en">· {OCPB_UNITS_NOTE.en}</span></div>}
+                <div className="rw-inline-actions">
+                  <button type="button" className="rw-btn small quiet outline" data-testid="doc-preview" data-preview-key={key} onClick={() => setPreviewKey(key)}
+                    aria-label={`ดูเอกสาร · Preview: ${name.th} · ${name.en}`}>
+                    ดูเอกสาร <span lang="en">· Preview</span>
+                  </button>
+                </div>
               </div>
               <a
                 className="rw-btn icon"
@@ -565,6 +575,20 @@ export default function Pipeline({
           </>
         )}
       </div>
+      {previewKey && d4?.case_id && d4.documents?.[previewKey] && (
+        <DocPreview
+          caseId={d4.case_id}
+          docKey={previewKey}
+          name={DOC_TYPES[previewKey] ?? { th: previewKey, en: previewKey }}
+          pages={d4.documents[previewKey].pages}
+          onClose={() => {
+            // Return focus to the row that opened it (Safari does not focus buttons on click).
+            const key = previewKey;
+            setPreviewKey(null);
+            requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-preview-key="${key}"]`)?.focus());
+          }}
+        />
+      )}
     </div>
   );
 }

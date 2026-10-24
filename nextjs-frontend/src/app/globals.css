@@ -262,6 +262,18 @@ textarea.rw-input { padding: var(--s2) var(--s3); min-height: 104px; resize: ver
 .rw-short { display: flex; gap: var(--s2); align-items: flex-start; font-size: 14px; line-height: 1.5; color: var(--ink2); }
 .rw-short svg { margin-top: 3px; }
 
+/* ── document viewer (in-page PDF preview) ────────────────────── */
+.rw-viewer { width: min(960px, calc(100vw - 2 * var(--gutter))); height: min(92vh, 1200px); max-width: none; max-height: none;
+  margin: auto; padding: 0; border: 0; border-radius: 12px; background: var(--surface); color: var(--ink); overflow: hidden; }
+.rw-viewer[open] { display: flex; flex-direction: column; }
+.rw-viewer::backdrop { background: rgba(13, 16, 21, .6); }
+.rw-viewer-bar { flex: none; display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s2) var(--s2) var(--inset); border-bottom: 1px solid var(--hair); }
+.rw-viewer-frame { flex: 1; width: 100%; min-height: 0; border: 0; background: var(--bg); }
+.rw-viewer-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s3);
+  padding: var(--s5) var(--inset); text-align: center; font-size: 15px; line-height: 1.6; color: var(--ink2); }
+.rw-viewer-state .rw-err { text-align: left; max-width: 36em; }
+.rw-viewer-foot { flex: none; display: flex; justify-content: center; padding: var(--s3) var(--inset); padding-bottom: max(var(--s3), env(safe-area-inset-bottom)); border-top: 1px solid var(--hair); }
+
 /* ── landing ──────────────────────────────────────────────────── */
 .rw-hero { display: flex; flex-direction: column; gap: var(--block); }
 .rw-hero-copy { display: flex; flex-direction: column; gap: var(--group); }
@@ -307,6 +319,8 @@ textarea.rw-input { padding: var(--s2) var(--s3); min-height: 104px; resize: ver
   .rw-only-desktop { display: none !important; }
   .rw-aside.first { order: -1; }
   .rw-page > .rw-head { order: -2; }
+  .rw-viewer { width: 100vw; height: 100vh; height: 100dvh; border-radius: 0; }
+  .rw-viewer-bar { padding-top: max(var(--s2), env(safe-area-inset-top)); }
 }
 @media (max-width: 360px) {
   .rw-fieldrow.two, .rw-kv { grid-template-columns: 1fr; }
