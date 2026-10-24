@@ -1,22 +1,40 @@
 'use client';
 
-import { useState, useEffect, useRef, CSSProperties } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import DropZone from '@/components/DropZone';
 import ClaimsList from '@/components/ClaimsList';
 import Pipeline from '@/components/Pipeline';
+import { Disclaimer } from '@/components/Disclaimer';
 import { Claim, PipelineResults, StepState } from '@/types';
 import { getMoveInRecords, dataUrlToFile, MoveInRecord } from '@/lib/moveInVault';
-import { ScaleIcon } from '@/components/icons';
+import { ChevronGlyph, CloseGlyph, DocGlyph, InfoGlyph, LockGlyph, PlusGlyph, StepFailGlyph, StepIdleGlyph } from '@/components/icons';
+
+type ExtractState = 'idle' | 'extracting' | 'done' | 'failed';
+const EXTRACT_LABEL: Record<ExtractState, string> = {
+  idle:       'อ่านข้อความ · Extract',
+  extracting: 'กำลังอ่าน… · Reading…',
+  done:       'อ่านแล้ว · Done',
+  failed:     'อ่านไม่สำเร็จ · Failed',
+};
 
 const IDLE_STEPS: StepState[] = ['idle', 'idle', 'idle', 'idle'];
 
-// Mirrors roomwitness-app/src/app/new-case.tsx's 4-step wizard, accent-for-accent.
+// One headline per wizard step; the stepper uses th/en.
 const WIZ_STEPS = [
-  { headline: 'เจ้าของบ้านหักค่าอะไรบ้าง?', sub: 'Landlord deductions · Add each claim below', accent: 'var(--amber-dark)' },
-  { headline: 'เปรียบเทียบภาพห้องของคุณ', sub: 'Photo evidence · Move-in vs move-out (optional)', accent: 'var(--blue)' },
-  { headline: 'เพิ่มหลักฐานประกอบ', sub: 'Supporting evidence · Contract and messages (optional)', accent: 'var(--green)' },
-  { headline: 'ตรวจสอบข้อมูลก่อนวิเคราะห์', sub: 'Review your case · Before AI analysis', accent: 'var(--purple)' },
+  { headline: 'เจ้าของบ้านหักค่าอะไรบ้าง?',   sub: 'List each deduction your landlord made.',               th: 'รายการหัก', en: 'Deductions' },
+  { headline: 'เปรียบเทียบภาพห้องของคุณ',     sub: 'Move-in and move-out photos. Optional, but they help.', th: 'ภาพถ่าย',   en: 'Photos' },
+  { headline: 'เพิ่มหลักฐานประกอบ',          sub: 'Your lease and messages. Optional.',                     th: 'หลักฐาน',   en: 'Evidence' },
+  { headline: 'ตรวจสอบก่อนเริ่มวิเคราะห์',     sub: 'Check your case before the analysis starts.',           th: 'ตรวจสอบ',   en: 'Review' },
+];
+
+// The five analysis steps, as previewed on the Review step (Pipeline shows them live).
+const PLAN_PREVIEW = [
+  { th: 'เทียบภาพก่อน–หลัง', sd: 'ภาพวันเข้าอยู่และวันย้ายออก · Move-in and move-out photos' },
+  { th: 'อ่านสัญญาเช่า',      sd: 'ข้อสัญญาเรื่องเงินประกัน · The deposit clauses' },
+  { th: 'ตรวจตามกฎหมาย',     sd: 'ป.พ.พ. และประกาศ สคบ. 2568 · CCC and OCPB 2568' },
+  { th: 'ยืนยันโดยคุณ',       sd: 'คุณตรวจผลก่อนสร้างเอกสาร · You approve first' },
+  { th: 'จัดทำเอกสาร',        sd: 'เอกสารภาษาไทย · Thai PDFs' },
 ];
 
 export default function AppPage() {
@@ -46,7 +64,14 @@ export default function AppPage() {
   const [corpusLoaded, setCorpusLoaded] = useState<boolean | null>(null);
   const [running,   setRunning]   = useState(false);
   const [elapsed,   setElapsed]   = useState(0);
-  const [error,     setError]     = useState<string | null>(null);
+  // Raw message of the failed step; shown behind a <details> in that step's panel.
+  const [runError,  setRunError]  = useState<string | null>(null);
+  const [claimsError, setClaimsError] = useState(false);
+  const [extractState, setExtractState] = useState<ExtractState>('idle');
+  const [extractError, setExtractError] = useState<string | null>(null);
+  // Agent 02 skipped after a failure: its StepState stays as-is, this flag drives the display.
+  const [agent02Skipped, setAgent02Skipped] = useState(false);
+  const [runClaims, setRunClaims] = useState<Claim[]>([]);
   const [showPipeline, setShowPipeline] = useState(false);
   const [steps,   setSteps]   = useState<StepState[]>(IDLE_STEPS);
   const [results, setResults] = useState<PipelineResults>({});
@@ -63,6 +88,8 @@ export default function AppPage() {
   // ── Move-in vault (saved earlier) ──
   const [moveInRecords, setMoveInRecords] = useState<MoveInRecord[]>([]);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const [showRecordPicker, setShowRecordPicker] = useState(false);
+  const selectTokenRef = useRef(0);
 
   useEffect(() => {
     const records = getMoveInRecords();
@@ -71,17 +98,37 @@ export default function AppPage() {
   }, []);
 
   const selectRecord = (id: string | null, records = moveInRecords) => {
+    const token = ++selectTokenRef.current;
     setSelectedRecordId(id);
+    setShowRecordPicker(false);
     const rec = id ? records.find(r => r.id === id) : undefined;
     if (!rec) { setMoveInFiles([]); setMoveInPrevs([]); return; }
     setMoveInPrevs(rec.photoDataUrls);
-    Promise.all(rec.photoDataUrls.map((u, i) => dataUrlToFile(u, `movein_${i}.jpg`))).then(setMoveInFiles);
+    Promise.all(rec.photoDataUrls.map((u, i) => dataUrlToFile(u, `movein_${i}.jpg`)))
+      .then(files => { if (token === selectTokenRef.current) setMoveInFiles(files); });
   };
+
+  // Per-run inputs: Retry and Replace file read these, never a stale render closure.
+  const runClaimsRef    = useRef<Claim[]>([]);
+  const d1Ref           = useRef<any>(null);
+  const d2Ref           = useRef<any>(null);
+  const contractFileRef = useRef<File | null>(null);
+  useEffect(() => { contractFileRef.current = contractFile; }, [contractFile]);
+  useEffect(() => { setExtractState('idle'); setExtractError(null); }, [contractFile]);
+  const firstItemRef = useRef<HTMLInputElement>(null);
+
+  // Each wizard step is a new screen: start at the top and move focus to its heading.
+  const h1Ref = useRef<HTMLHeadingElement>(null);
+  const stepMounted = useRef(false);
+  useEffect(() => {
+    if (!stepMounted.current) { stepMounted.current = true; return; }
+    window.scrollTo(0, 0);
+    h1Ref.current?.focus({ preventScroll: true });
+  }, [step]);
 
   const screenshotInputRef = useRef<HTMLInputElement>(null);
   const moveInInputRef   = useRef<HTMLInputElement>(null);
   const moveOutInputRef  = useRef<HTMLInputElement>(null);
-  const extractBtnRef    = useRef<HTMLButtonElement>(null);
 
   const makePreviews = (files: File[], setPrevs: (p: string[]) => void) => {
     const readers = files.map(f => new Promise<string>(resolve => {
@@ -153,23 +200,18 @@ export default function AppPage() {
   // ── Contract PDF extraction ──────────────────────────────────────
   const extractContract = async () => {
     if (!contractFile) return;
-    const btn = extractBtnRef.current;
-    if (btn) { btn.textContent = 'Extracting…'; btn.disabled = true; }
+    setExtractState('extracting');
+    setExtractError(null);
     try {
       const fd = new FormData();
       fd.append('contract_file', contractFile);
       const d = await fetch('/extract-contract', { method: 'POST', body: fd }).then(r => r.json());
       if (d.error) throw new Error(d.error);
       setContractClause(d.text);
-      if (btn) btn.textContent = '✓ Done';
+      setExtractState('done');
     } catch (err: any) {
-      if (btn) btn.textContent = 'Failed';
-      alert(err.message);
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        setTimeout(() => { if (btn) btn.textContent = 'Extract ↑'; }, 3000);
-      }
+      setExtractState('failed');
+      setExtractError(err.message);
     }
   };
 
@@ -180,59 +222,92 @@ export default function AppPage() {
   // ── Wizard nav ──────────────────────────────────────────────────
   const validClaims = claims.filter(c => c.item.trim());
   function goNext() {
-    if (step === 0 && !validClaims.length) { setError('Add at least one claim.'); return; }
-    setError(null);
+    if (step === 0 && !validClaims.length) {
+      setClaimsError(true);
+      firstItemRef.current?.focus({ preventScroll: true });
+      firstItemRef.current?.scrollIntoView({ block: 'center' });
+      return;
+    }
     if (step < 3) setStep(s => s + 1);
   }
   function goBack() {
     if (step > 0) setStep(s => s - 1);
   }
+  const onClaimsChange = (next: Claim[]) => {
+    setClaims(next);
+    if (claimsError) setClaimsError(false);
+  };
 
   // ── Submit ────────────────────────────────────────────────────────
   function requestAnalysis() {
-    if (!validClaims.length) { setError('Add at least one claim.'); return; }
-    setError(null);
-    runPipeline(validClaims);
-  }
-
-  const runPipeline = async (validClaims: Claim[]) => {
-    setRunning(true);
-    setShowPipeline(true);
-    setSteps(IDLE_STEPS);
-    setResults({});
-
+    if (!validClaims.length) { setStep(0); setClaimsError(true); return; }
+    runClaimsRef.current = validClaims;
+    setRunClaims(validClaims);
+    setAgent02Skipped(false);
+    d1Ref.current = null;
+    d2Ref.current = null;
     setTimeout(() => {
       document.getElementById('pipeline')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 80);
+    runFrom(0);
+  }
 
+  // Runs the agents from step `start` on, reusing earlier results held in refs.
+  // The fetch blocks below are the original ones; only the control flow around them changed.
+  const runFrom = async (start: number) => {
+    const validClaims = runClaimsRef.current;
+    const contractFile = contractFileRef.current;
+    setRunning(true);
+    setShowPipeline(true);
+    setRunError(null);
+    setAwaitingDocApproval(false);
+    setPendingDocArgs(null);
+    setGeneratingDocs(false);
+    setSteps(prev => prev.map((s, idx) => (idx >= start || idx === 3) ? 'idle' : s));
+    setResults(prev => start === 0 ? {} : start === 1 ? { agent01: prev.agent01 } : { agent01: prev.agent01, agent02: prev.agent02 });
+    if (start <= 1) setAgent02Skipped(false);
+
+    let i = start;
     try {
-      setStepState(0, 'active');
-      const fd1 = new FormData();
-      moveInFiles.forEach(f  => fd1.append('move_in',  f));
-      moveOutFiles.forEach(f => fd1.append('move_out', f));
-      fd1.append('claims', JSON.stringify(validClaims));
-      const d1 = await fetch('/run/agent01', { method: 'POST', body: fd1 }).then(r => r.json());
-      if (d1.error) throw new Error(`Agent 01: ${d1.error}`);
-      setResults(prev => ({ ...prev, agent01: d1 }));
-      setStepState(0, 'done');
+      if (start <= 0) {
+        i = 0;
+        setStepState(0, 'active');
+        const fd1 = new FormData();
+        moveInFiles.forEach(f  => fd1.append('move_in',  f));
+        moveOutFiles.forEach(f => fd1.append('move_out', f));
+        fd1.append('claims', JSON.stringify(validClaims));
+        const d1 = await fetch('/run/agent01', { method: 'POST', body: fd1 }).then(r => r.json());
+        if (d1.error) throw new Error(`Agent 01: ${d1.error}`);
+        d1Ref.current = d1;
+        setResults(prev => ({ ...prev, agent01: d1 }));
+        setStepState(0, 'done');
+      }
+      const d1 = d1Ref.current;
 
-      setStepState(1, 'active');
-      const fd2 = new FormData();
-      fd2.append('claims',           JSON.stringify(validClaims));
-      fd2.append('contract_clause',  contractClause);
-      fd2.append('lease_start',      leaseStart);
-      fd2.append('lease_end',        leaseEnd);
-      fd2.append('deposit_amount',   depositAmount || '0');
-      fd2.append('monthly_rent',     monthlyRent   || '0');
-      fd2.append('manual_landlord_promises', landlordPromises);
-      fd2.append('manual_tenant_promises',   tenantPromises);
-      if (contractFile) fd2.append('contract_file', contractFile);
-      screenshots.forEach(f => fd2.append('screenshots', f));
-      const d2 = await fetch('/run/agent02', { method: 'POST', body: fd2 }).then(r => r.json());
-      if (d2.error) throw new Error(`Agent 02: ${d2.error}`);
-      setResults(prev => ({ ...prev, agent02: d2 }));
-      setStepState(1, 'done');
+      if (start <= 1) {
+        i = 1;
+        setStepState(1, 'active');
+        const fd2 = new FormData();
+        fd2.append('claims',           JSON.stringify(validClaims));
+        fd2.append('contract_clause',  contractClause);
+        fd2.append('lease_start',      leaseStart);
+        fd2.append('lease_end',        leaseEnd);
+        fd2.append('deposit_amount',   depositAmount || '0');
+        fd2.append('monthly_rent',     monthlyRent   || '0');
+        fd2.append('manual_landlord_promises', landlordPromises);
+        fd2.append('manual_tenant_promises',   tenantPromises);
+        if (contractFile) fd2.append('contract_file', contractFile);
+        screenshots.forEach(f => fd2.append('screenshots', f));
+        const d2 = await fetch('/run/agent02', { method: 'POST', body: fd2 }).then(r => r.json());
+        if (d2.error) throw new Error(`Agent 02: ${d2.error}`);
+        d2Ref.current = d2;
+        setResults(prev => ({ ...prev, agent02: d2 }));
+        setStepState(1, 'done');
+      }
+      // After Skip this is {}, so has_void_clause below is false.
+      const d2 = d2Ref.current ?? {};
 
+      i = 2;
       setStepState(2, 'active');
       const d3 = await fetch('/run/agent03', {
         method: 'POST',
@@ -255,17 +330,35 @@ export default function AppPage() {
       setAwaitingDocApproval(true);
 
     } catch (err: any) {
-      setError(err.message);
+      setStepState(i, 'error');
+      setRunError(err.message);
     } finally {
       setRunning(false);
     }
   };
 
+  const retryStep = (i: number) => runFrom(i);
+
+  // Agent 02 failed: continue without contract analysis (same agent 03 request, d2 = {}).
+  const skipAgent02 = () => {
+    d2Ref.current = {};
+    setAgent02Skipped(true);
+    setStepState(1, 'idle');
+    runFrom(2);
+  };
+
+  const replaceContractFile = (f: File) => {
+    contractFileRef.current = f;
+    setContractFile(f);
+    runFrom(1);
+  };
+
   const approveDocs = async () => {
     if (!pendingDocArgs) return;
     const { claims: validClaims, d3 } = pendingDocArgs;
-    setAwaitingDocApproval(false);
+    // The approval section stays mounted (showing "Creating…") until agent 04 succeeds.
     setGeneratingDocs(true);
+    setRunError(null);
     setStepState(3, 'active');
     try {
       const d4 = await fetch('/run/agent04', {
@@ -282,193 +375,272 @@ export default function AppPage() {
         }),
       }).then(r => r.json());
       if (d4.error) throw new Error(`Agent 04: ${d4.error}`);
+      // Downloads need a case id; without one there is nothing to show, so treat it as a failure.
+      if (!d4.case_id) throw new Error('Agent 04: response has no case_id');
       setResults(prev => ({ ...prev, agent04: d4 }));
       setStepState(3, 'done');
+      setAwaitingDocApproval(false);
+      // Keep the args while a requested document is missing, so its Retry can re-run agent 04.
+      const requested: string[] = d3.documents_to_generate ?? ['demand_letter', 'evidence_summary'];
+      if (requested.every(k => d4.documents?.[k])) setPendingDocArgs(null);
     } catch (err: any) {
-      setError(err.message);
+      setStepState(3, 'error');
+      setRunError(err.message);
     } finally {
       setGeneratingDocs(false);
-      setPendingDocArgs(null);
     }
   };
 
-  const corpusPillClass = corpusLoaded === null
-    ? 'corpus-pill corpus-loading'
-    : corpusLoaded ? 'corpus-pill corpus-ok' : 'corpus-pill corpus-err';
-  const corpusPillText = corpusLoaded === null
-    ? 'checking'
-    : corpusLoaded ? '✓ Corpus ready' : '✗ Corpus missing';
-
+  const selectedRecord = selectedRecordId ? moveInRecords.find(r => r.id === selectedRecordId) : undefined;
   const totalCharged = claims.reduce((s, c) => s + (c.amount_thb || 0), 0);
   const s = WIZ_STEPS[step];
+  const hasContract = !!contractFile || !!contractClause.trim();
+
+  if (showPipeline) {
+    return (
+      <Pipeline
+        steps={steps}
+        results={results}
+        claims={runClaims}
+        moveInPreviews={moveInPrevs}
+        moveOutPreviews={moveOutPrevs}
+        hasContract={hasContract}
+        agent02Skipped={agent02Skipped}
+        errorDetail={runError}
+        running={running}
+        awaitingDocApproval={awaitingDocApproval}
+        generatingDocs={generatingDocs}
+        onApproveDocs={approveDocs}
+        onRetry={retryStep}
+        onSkip={skipAgent02}
+        onReplaceFile={replaceContractFile}
+        onEditCase={() => setShowPipeline(false)}
+      />
+    );
+  }
+
+  const stepper = (rail: boolean) => (
+    <ol className={`rw-steps ${rail ? '' : 'rw-only-mobile'}`} aria-label="ขั้นตอน · Steps">
+      {WIZ_STEPS.map((w, i) => (
+        <li key={i} className={i < step ? 'done' : i === step ? 'now' : undefined} aria-current={i === step ? 'step' : undefined}>
+          <span>
+            {w.th}{rail && <span className="rw-railsub" lang="en">· {w.en}</span>}
+            {i < step && <span className="visually-hidden"> · เสร็จแล้ว · done</span>}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+  const nextButton = (
+    <button className={`rw-btn ${step === 3 ? 'wrap' : ''}`} data-testid="wiz-next" onClick={step < 3 ? goNext : requestAnalysis}
+      disabled={running} aria-busy={running || undefined}>
+      {step < 3
+        ? <>ถัดไป <span lang="en">· Next</span></>
+        : running ? <>กำลังวิเคราะห์… <span lang="en">· Analyzing…</span></> : <>เริ่มวิเคราะห์ <span lang="en">· Start analysis</span></>}
+    </button>
+  );
+  const editButton = (to: number, label: string) => (
+    <button type="button" className="rw-btn quiet small" onClick={() => setStep(to)} aria-label={label}>แก้ไข <span lang="en">· Edit</span></button>
+  );
 
   return (
-    <>
-      <div className={showPipeline ? 'case-flow is-analyzing' : 'case-flow'} style={{ '--wiz-accent': s.accent } as CSSProperties}>
-        <div className="wiz-header">
-          <div className="wiz-brand">RoomWitness<span>ผู้ช่วยเรื่องเงินประกันเช่า<small>Rental deposit disputes</small></span></div>
-          <div className="wiz-topline">
-            <Link href="/" className="wiz-back">← หน้าหลัก · Home</Link>
-            <span className="wiz-step-pill">ขั้นตอน {step + 1} / 4 · Step {step + 1}</span>
-          </div>
-          <div className="wiz-progress">
-            {['รายการหักเงิน|Claims', 'ภาพถ่าย|Photos', 'หลักฐานเพิ่มเติม|Extras', 'ตรวจสอบ|Review'].map((label, i) => (
-              <div key={i} className={`wiz-progress-seg ${i <= step ? 'on' : ''} ${i === step ? 'current' : ''}`} aria-current={i === step ? 'step' : undefined}>
-                <span className="wiz-progress-number">{i < step ? '✓' : i + 1}</span>
-                <span>{label.split('|')[0]}<small>{label.split('|')[1]}</small></span>
-              </div>
-            ))}
-          </div>
-          <div className="wiz-title-row">
-            <div>
-              <div className="wiz-headline">{s.headline}</div>
-              <div className="wiz-sub">{s.sub}</div>
-            </div>
-            <div className="wiz-badge">{step + 1}</div>
+    <div className="rw-shell">
+      <header className="rw-top"><div className="rw-top-in">
+        <Link href="/" className="rw-mark">RoomWitness</Link>
+        <Link href="/" className="rw-toplink">หน้าหลัก · Home</Link>
+      </div></header>
+
+      <div className="rw-page">
+        <div className="rw-head stack">
+          {stepper(false)}
+          <div className="rw-head">
+            <h1 className="rw-h1" ref={h1Ref} tabIndex={-1}>{s.headline}</h1>
+            <p className="rw-sub" lang="en">{s.sub}</p>
           </div>
         </div>
 
-        <main className="wiz-body">
-          <div className="case-editor">
-          {/* ── Step 0: Claims ─────────────────────────── */}
+        <main className="rw-main">
+          {/* ── Step 0: Deductions ─────────────────────── */}
           {step === 0 && (
             <>
-              <ClaimsList claims={claims} onChange={setClaims} />
-              <p className="privacy-note">
-                🔒 รูปภาพ สัญญาเช่า และข้อความที่คุณอัปโหลดใช้เพื่อประมวลผลคดีของคุณเท่านั้น ไม่เปิดเผยต่อบุคคลที่สาม
-                ระบบเก็บบันทึกสรุปผลวิเคราะห์ (ไม่รวมภาพต้นฉบับ) ไว้ 90 วันเพื่อการตรวจสอบย้อนหลัง
-                <br />
-                <span className="privacy-note-en">Your photos, lease, and messages are used only to process your case and are never shared with third parties. A summary record (not original photos) is kept for 90 days for audit purposes.</span>
+              <ClaimsList claims={claims} onChange={onClaimsChange} itemError={claimsError} firstItemRef={firstItemRef} />
+              <p className="rw-short">
+                <LockGlyph />
+                <span>
+                  รูปภาพ สัญญาเช่า และข้อความที่คุณอัปโหลดใช้เพื่อประมวลผลคดีของคุณเท่านั้น ไม่เปิดเผยต่อบุคคลที่สาม
+                  ระบบเก็บบันทึกสรุปผลวิเคราะห์ (ไม่รวมภาพต้นฉบับ) ไว้ 90 วันเพื่อการตรวจสอบย้อนหลัง{' '}
+                  <span lang="en">· Your photos, lease, and messages are used only to process your case and are never shared with third parties. A summary record (not original photos) is kept for 90 days for audit purposes.</span>
+                </span>
               </p>
             </>
           )}
 
           {/* ── Step 1: Photos ─────────────────────────── */}
           {step === 1 && (
-            <section className="card">
-              <input ref={moveInInputRef}  type="file" accept="image/*" multiple className="dz-input"
+            <>
+              <input ref={moveInInputRef}  type="file" accept="image/*" multiple className="dz-input" tabIndex={-1} aria-hidden="true" data-testid="movein-input"
                 onChange={e => { addMoveIn(e.target.files);  e.target.value = ''; }} />
-              <input ref={moveOutInputRef} type="file" accept="image/*" multiple className="dz-input"
+              <input ref={moveOutInputRef} type="file" accept="image/*" multiple className="dz-input" tabIndex={-1} aria-hidden="true" data-testid="moveout-input"
                 onChange={e => { addMoveOut(e.target.files); e.target.value = ''; }} />
 
-              <div className="photo-columns">
-                <div className="photo-col">
-                  <div className="photo-col-label">ภาพเมื่อเข้าอยู่<span className="h2-en">Move-in</span></div>
-                  {moveInRecords.length > 0 && (
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+              <section className="rw-group" aria-labelledby="g-movein">
+                <h2 id="g-movein" className="rw-gt"><span>ภาพวันเข้าอยู่ <span lang="en">· Move-in</span></span></h2>
+                <div className="rw-list pad">
+                  {selectedRecord ? (
+                    <div className="rw-group" data-testid="vault-choice">
+                      <div className="rw-rowmain">
+                        <div className="rw-rt">ใช้ภาพจาก: {selectedRecord.label}</div>
+                        <div className="rw-rd">{selectedRecord.photoDataUrls.length} รูปที่บันทึกไว้ <span lang="en">· Using {selectedRecord.photoDataUrls.length} photos from your saved move-in record</span></div>
+                      </div>
+                      <div className="rw-inline-actions">
+                        {moveInRecords.length > 1 && (
+                          <button type="button" className="rw-btn quiet outline small" aria-expanded={showRecordPicker} onClick={() => setShowRecordPicker(v => !v)}>
+                            เปลี่ยน <span lang="en">· Change</span>
+                          </button>
+                        )}
+                        <button type="button" className="rw-btn quiet outline small" data-testid="vault-upload-new"
+                          onClick={() => { selectRecord(null); moveInInputRef.current?.click(); }}>
+                          อัปโหลดใหม่ <span lang="en">· Upload new</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : moveInRecords.length > 0 && (
+                    <p className="rw-rd">มีภาพวันเข้าอยู่ที่บันทึกไว้ เลือกใช้ได้ <span lang="en">· You have saved move-in photos you can use</span></p>
+                  )}
+                  {(showRecordPicker || (!selectedRecord && moveInRecords.length > 0)) && (
+                    <div className="rw-chips" role="group" aria-label="ภาพที่บันทึกไว้ · Saved records">
                       {moveInRecords.map(r => (
-                        <button key={r.id} type="button" className="btn-secondary"
-                          style={selectedRecordId === r.id ? { borderColor: 'var(--green)', color: 'var(--green)' } : undefined}
-                          onClick={() => selectRecord(selectedRecordId === r.id ? null : r.id)}>
+                        <button key={r.id} type="button" className="rw-chip" aria-pressed={selectedRecordId === r.id} onClick={() => selectRecord(r.id)}>
                           {r.label} · {r.photoDataUrls.length}
                         </button>
                       ))}
                     </div>
                   )}
-                  <div className="photo-thumb-grid">
+                  <div className="rw-thumbs">
                     {moveInPrevs.map((src, i) => (
-                      <div key={i} className="photo-thumb">
-                        <img src={src} alt="" />
-                        {moveInRecords.length === 0 && <div className="dz-filename">{moveInFiles[i]?.name}</div>}
-                        {moveInRecords.length === 0 && (
-                          <button type="button" className="thumb-remove" onClick={() => removeMoveIn(i)}>✕</button>
+                      <div key={i} className="rw-thumb photo-thumb">
+                        <img src={src} alt={`ภาพวันเข้าอยู่ ${i + 1} · Move-in photo ${i + 1}`} />
+                        {!selectedRecord && (
+                          <button type="button" className="rw-btn icon" aria-label={`ลบภาพ ${i + 1} · Remove photo ${i + 1}`} onClick={() => removeMoveIn(i)}><CloseGlyph /></button>
                         )}
                       </div>
                     ))}
-                    {moveInRecords.length === 0 && (
-                      <button type="button" className="photo-add-btn" onClick={() => moveInInputRef.current?.click()}>
-                        <span>+</span><span>เพิ่มรูป · Add</span>
+                    {!selectedRecord && (
+                      <button type="button" className="rw-addtile" data-testid="movein-add" onClick={() => moveInInputRef.current?.click()}>
+                        <PlusGlyph /><span>เพิ่มรูป <span lang="en">· Add</span></span>
                       </button>
                     )}
                   </div>
                   {moveInRecords.length === 0 && (
-                    <Link href="/move-in" style={{ fontSize: 12, color: 'var(--blue)', marginTop: 6, display: 'inline-block' }}>
-                      บันทึกรูปวันเข้าอยู่ได้ฟรี · Save move-in photos →
-                    </Link>
+                    <Link href="/move-in" className="rw-btn quiet start">บันทึกรูปวันเข้าอยู่ไว้ใช้ภายหลัง <span lang="en">· Save move-in photos for later</span></Link>
                   )}
                 </div>
+              </section>
 
-                <div className="photo-col">
-                  <div className="photo-col-label">ภาพเมื่อย้ายออก<span className="h2-en">Move-out</span></div>
-                  <div className="photo-thumb-grid">
+              <section className="rw-group" aria-labelledby="g-moveout">
+                <h2 id="g-moveout" className="rw-gt"><span>ภาพวันย้ายออก <span lang="en">· Move-out</span></span></h2>
+                <div className="rw-list pad">
+                  <div className="rw-thumbs">
                     {moveOutPrevs.map((src, i) => (
-                      <div key={i} className="photo-thumb">
-                        <img src={src} alt="" />
-                        <div className="dz-filename">{moveOutFiles[i]?.name}</div>
-                        <button type="button" className="thumb-remove" onClick={() => removeMoveOut(i)}>✕</button>
+                      <div key={i} className="rw-thumb photo-thumb">
+                        <img src={src} alt={`ภาพวันย้ายออก ${i + 1} · Move-out photo ${i + 1}`} />
+                        <button type="button" className="rw-btn icon" aria-label={`ลบภาพ ${i + 1} · Remove photo ${i + 1}`} onClick={() => removeMoveOut(i)}><CloseGlyph /></button>
                       </div>
                     ))}
-                    <button type="button" className="photo-add-btn" onClick={() => moveOutInputRef.current?.click()}>
-                      <span>+</span><span>เพิ่มรูป · Add</span>
+                    <button type="button" className="rw-addtile" data-testid="moveout-add" onClick={() => moveOutInputRef.current?.click()}>
+                      <PlusGlyph /><span>เพิ่มรูป <span lang="en">· Add</span></span>
                     </button>
                   </div>
                 </div>
-              </div>
-            </section>
+              </section>
+              <p className="rw-short"><InfoGlyph /><span>ใช้ภาพมุมเดียวกันก่อนและหลังเช่า หากไม่มีภาพ ข้ามขั้นตอนนี้ได้ <span lang="en">· Matching angles help. You can continue without photos.</span></span></p>
+            </>
           )}
 
-          {/* ── Step 2: Extras ─────────────────────────── */}
+          {/* ── Step 2: Evidence ───────────────────────── */}
           {step === 2 && (
             <>
-              <section className="card">
-                <h2>สัญญาเช่า<span className="h2-en">Rental contract</span></h2>
-                <div className="contract-upload-row">
+              <section className="rw-group" aria-labelledby="g-contract">
+                <h2 id="g-contract" className="rw-gt"><span>สัญญาเช่า <span lang="en">· Rental contract</span></span></h2>
+                <div className="rw-fields">
                   <DropZone
-                    label="อัปโหลดสัญญา · PDF / image" sublabel="อ่านข้อความอัตโนมัติ · Auto-extract text" accept=".pdf,image/*"
-                    file={contractFile} onFile={setContractFile} className="drop-zone-doc" minHeight="70px"
+                    label="อัปโหลดสัญญา · Upload your lease" sublabel="PDF หรือรูปภาพ · PDF or image" accept=".pdf,image/*"
+                    file={contractFile} onFile={setContractFile} testId="contract-drop" icon={<DocGlyph />}
                   />
-                  <div className="contract-text-wrap">
-                    <div className="contract-extract-row">
-                      <label>ข้อสัญญาที่เกี่ยวข้อง <span className="lbl-en">Relevant clause</span></label>
-                      {contractFile && <button ref={extractBtnRef} type="button" className="btn-extract" onClick={extractContract}>อ่านข้อความ · Extract</button>}
+                  {contractFile && (
+                    <div className="rw-inline-actions">
+                      <button type="button" className="rw-btn quiet outline small" data-testid="extract-btn" data-state={extractState}
+                        onClick={extractContract} disabled={extractState === 'extracting'} aria-busy={extractState === 'extracting' || undefined}>
+                        {EXTRACT_LABEL[extractState]}
+                      </button>
+                      {extractState === 'done' && (
+                        <p className="rw-fieldnote" role="status">อ่านข้อความจากไฟล์แล้ว ตรวจสอบได้ด้านล่าง <span lang="en">· Text read from the file. Check it below.</span></p>
+                      )}
                     </div>
-                    <textarea rows={4} placeholder="Paste a clause, or upload above to auto-extract."
+                  )}
+                  {extractState === 'failed' && (
+                    <div className="rw-err" role="alert" data-testid="extract-error">
+                      <StepFailGlyph size={20} />
+                      <span>
+                        อ่านข้อความจากไฟล์ไม่สำเร็จ วางข้อสัญญาเองได้ <span lang="en">· Couldn&apos;t read text from the file. You can paste the clause instead.</span>
+                        {extractError && <details className="rw-details"><summary>รายละเอียดทางเทคนิค · Technical detail</summary><code>{extractError}</code></details>}
+                      </span>
+                    </div>
+                  )}
+                  <div className="rw-field">
+                    <label className="rw-label" htmlFor="contract-clause">ข้อสัญญาที่เกี่ยวข้อง <span lang="en">· Relevant clause</span></label>
+                    <textarea id="contract-clause" className="rw-input" rows={4} data-testid="contract-text" placeholder="วางข้อสัญญา หรืออัปโหลดไฟล์ด้านบน · Paste a clause, or upload above"
                       value={contractClause} onChange={e => setContractClause(e.target.value)} />
                   </div>
                 </div>
-                <div className="contract-meta-grid">
-                  <div className="field"><label>วันเริ่มสัญญา <span className="lbl-en">Lease start</span></label><input type="date" value={leaseStart} onChange={e => setLeaseStart(e.target.value)} /></div>
-                  <div className="field"><label>วันสิ้นสุดสัญญา <span className="lbl-en">Lease end</span></label><input type="date" value={leaseEnd} onChange={e => setLeaseEnd(e.target.value)} /></div>
-                  <div className="field"><label>เงินประกัน (฿) <span className="lbl-en">Deposit paid</span></label><input type="number" min="0" placeholder="20000" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} /></div>
-                  <div className="field"><label>ค่าเช่าต่อเดือน (฿) <span className="lbl-en">Monthly rent</span></label><input type="number" min="0" placeholder="10000" value={monthlyRent} onChange={e => setMonthlyRent(e.target.value)} /></div>
-                  <div className="field"><label>จำนวนห้องของผู้ให้เช่า <span className="lbl-en">Units (0 = unknown)</span></label><input type="number" min="0" placeholder="5" value={unitCount} onChange={e => setUnitCount(e.target.value)} /></div>
-                </div>
               </section>
 
-              <section className="card">
-                <h2>ภาพแชทสนทนา <span className="h2-en">Chat screenshots · LINE / WhatsApp / SMS</span></h2>
-                <div className="screenshot-dz" onClick={() => screenshotInputRef.current?.click()}>
-                  <input ref={screenshotInputRef} type="file" accept="image/*" multiple className="dz-input"
-                    onChange={e => { if (e.target.files) addScreenshots(e.target.files); e.target.value = ''; }} />
-                  {screenshotPrevs.length === 0 ? (
-                    <div className="screenshot-dz-placeholder">
-                      <strong>เพิ่มภาพแชท · Add screenshots</strong>
-                      <span>เลือกได้หลายไฟล์ · Multiple files accepted</span>
-                      <button type="button" className="btn-secondary" onClick={e => { e.stopPropagation(); screenshotInputRef.current?.click(); }}>เลือกไฟล์ · Browse</button>
+              <section className="rw-group" aria-labelledby="g-lease">
+                <h2 id="g-lease" className="rw-gt"><span>รายละเอียดสัญญา <span lang="en">· Lease details</span></span></h2>
+                <div className="rw-fields">
+                  <div className="rw-fieldrow even">
+                    <div className="rw-field"><label className="rw-label" htmlFor="lease-start">วันเริ่มสัญญา <span lang="en">· Lease start</span></label><input id="lease-start" className="rw-input" data-testid="lease-start" type="date" value={leaseStart} onChange={e => setLeaseStart(e.target.value)} /></div>
+                    <div className="rw-field"><label className="rw-label" htmlFor="lease-end">วันสิ้นสุดสัญญา <span lang="en">· Lease end</span></label><input id="lease-end" className="rw-input" data-testid="lease-end" type="date" value={leaseEnd} onChange={e => setLeaseEnd(e.target.value)} /></div>
+                    <div className="rw-field"><label className="rw-label" htmlFor="deposit">เงินประกัน <span lang="en">· Deposit paid</span></label><div className="rw-prefix"><span aria-hidden="true">฿</span><input id="deposit" className="rw-input" data-testid="deposit" type="number" inputMode="numeric" min="0" placeholder="20000" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} /></div></div>
+                    <div className="rw-field"><label className="rw-label" htmlFor="rent">ค่าเช่าต่อเดือน <span lang="en">· Monthly rent</span></label><div className="rw-prefix"><span aria-hidden="true">฿</span><input id="rent" className="rw-input" data-testid="rent" type="number" inputMode="numeric" min="0" placeholder="10000" value={monthlyRent} onChange={e => setMonthlyRent(e.target.value)} /></div></div>
+                    <div className="rw-field">
+                      <label className="rw-label" htmlFor="units">จำนวนห้องที่ผู้ให้เช่าปล่อยเช่า <span lang="en">· Landlord&apos;s rental units</span></label>
+                      <input id="units" className="rw-input" data-testid="units" type="number" inputMode="numeric" min="0" placeholder="5" aria-describedby="units-note" value={unitCount} onChange={e => setUnitCount(e.target.value)} />
+                      <p id="units-note" className="rw-fieldnote">ไม่ทราบให้ใส่ 0 <span lang="en">· Enter 0 if you don&apos;t know</span></p>
                     </div>
-                  ) : (
-                    <div className="screenshot-grid">
-                      {screenshotPrevs.map((src, i) => (
-                        <div key={i} className="screenshot-thumb">
-                          <img src={src} alt="" />
-                          <button type="button" className="thumb-remove" onClick={e => { e.stopPropagation(); removeScreenshot(i); }}>✕</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              <section className="card">
-                <h2>ข้อตกลงเป็นลายลักษณ์อักษร<span className="h2-en">Written promises</span></h2>
-                <div className="two-col">
-                  <div className="field">
-                    <label>เจ้าของบ้านตกลงไว้ <span className="lbl-en">Landlord promises</span></label>
-                    <textarea rows={4} placeholder='"I will return deposit in full if room is clean"' value={landlordPromises} onChange={e => setLandlordPromises(e.target.value)} />
                   </div>
-                  <div className="field">
-                    <label>คุณได้แจ้งหรือตกลงไว้ <span className="lbl-en">Your statements</span></label>
-                    <textarea rows={4} placeholder='"Wall scuff was already there at move-in"' value={tenantPromises} onChange={e => setTenantPromises(e.target.value)} />
+                </div>
+              </section>
+
+              <section className="rw-group" aria-labelledby="g-chats">
+                <h2 id="g-chats" className="rw-gt"><span>ภาพแชท <span lang="en">· Chat screenshots (LINE, WhatsApp, SMS)</span></span></h2>
+                <div className="rw-list pad">
+                  <input ref={screenshotInputRef} type="file" accept="image/*" multiple className="dz-input" tabIndex={-1} aria-hidden="true" data-testid="screenshots-input"
+                    onChange={e => { if (e.target.files) addScreenshots(e.target.files); e.target.value = ''; }} />
+                  <div className="rw-thumbs">
+                    {screenshotPrevs.map((src, i) => (
+                      <div key={i} className="rw-thumb">
+                        <img src={src} alt={`ภาพแชท ${i + 1} · Chat screenshot ${i + 1}`} />
+                        <button type="button" className="rw-btn icon" aria-label={`ลบภาพแชท ${i + 1} · Remove screenshot ${i + 1}`} onClick={() => removeScreenshot(i)}><CloseGlyph /></button>
+                      </div>
+                    ))}
+                    <button type="button" className="rw-addtile" onClick={() => screenshotInputRef.current?.click()}>
+                      <PlusGlyph /><span>เพิ่มภาพแชท <span lang="en">· Add</span></span>
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rw-group" aria-labelledby="g-promises">
+                <h2 id="g-promises" className="rw-gt"><span>ข้อตกลงเป็นลายลักษณ์อักษร <span lang="en">· Written promises</span></span></h2>
+                <div className="rw-fields">
+                  <div className="rw-field">
+                    <label className="rw-label" htmlFor="landlord-promises">เจ้าของบ้านตกลงไว้ <span lang="en">· Landlord promises</span></label>
+                    <textarea id="landlord-promises" className="rw-input" rows={3} placeholder="เช่น คืนเงินเต็มจำนวนถ้าห้องสะอาด · e.g. Full refund if the room is clean" value={landlordPromises} onChange={e => setLandlordPromises(e.target.value)} />
+                  </div>
+                  <div className="rw-field">
+                    <label className="rw-label" htmlFor="tenant-promises">คุณได้แจ้งหรือตกลงไว้ <span lang="en">· Your statements</span></label>
+                    <textarea id="tenant-promises" className="rw-input" rows={3} placeholder="เช่น รอยบนผนังมีอยู่ก่อนเข้าอยู่ · e.g. The wall scuff was there at move-in" value={tenantPromises} onChange={e => setTenantPromises(e.target.value)} />
                   </div>
                 </div>
               </section>
@@ -478,114 +650,60 @@ export default function AppPage() {
           {/* ── Step 3: Review ─────────────────────────── */}
           {step === 3 && (
             <>
-              <div className="review-hero">
-                <div className="review-hero-label">ยอดหักเงินที่ต้องการตรวจสอบ<span className="h2-en">Total disputed</span></div>
-                <div className="review-hero-amount">฿{totalCharged.toLocaleString()}</div>
-                <div className="review-stat-row">
-                  <div className="review-stat"><b>{validClaims.length}</b><span>รายการ · Claims</span></div>
-                  <div className="review-stat"><b>{moveInPrevs.length}</b><span>รูปเข้าอยู่ · Move-in</span></div>
-                  <div className="review-stat"><b>{moveOutPrevs.length}</b><span>รูปย้ายออก · Move-out</span></div>
-                </div>
+              <div className="rw-figure" data-testid="wizard-review">
+                <div className="rw-num">฿{totalCharged.toLocaleString()}</div>
+                <div className="rw-numcap">ยอดหักเงินที่ส่งตรวจ<span lang="en">Total deductions to check</span></div>
               </div>
-              <section className="card review-claims">
-                <div className="section-title-row">
-                  <h2>รายการที่ส่งวิเคราะห์<span className="h2-en">Claims to assess</span></h2>
-                  <button className="text-button" onClick={() => setStep(0)}>แก้ไข · Edit</button>
-                </div>
-                {validClaims.map(c => (
-                  <div className="review-claim" key={c.claim_id}>
-                    <div><strong>{c.item}</strong><p>{c.description || '—'}</p></div>
-                    <b>฿{c.amount_thb.toLocaleString()}</b>
-                  </div>
-                ))}
-                <div className="review-evidence-links">
-                  <button className="text-button" onClick={() => setStep(1)}>แก้ไขรูปถ่าย · Edit photos</button>
-                  <button className="text-button" onClick={() => setStep(2)}>แก้ไขหลักฐาน · Edit evidence</button>
+              <section className="rw-group" aria-labelledby="g-review-claims">
+                <h2 id="g-review-claims" className="rw-gt"><span>รายการที่ส่งตรวจ <span lang="en">· Deductions</span></span>{editButton(0, 'แก้ไขรายการ · Edit deductions')}</h2>
+                <div className="rw-list">
+                  {validClaims.map(c => (
+                    <div className="rw-row" key={c.claim_id}>
+                      <div className="rw-rowmain"><div className="rw-rt">{c.item}</div>{c.description && <div className="rw-rd">{c.description}</div>}</div>
+                      <div className="rw-amt">{c.amount_thb ? `฿${c.amount_thb.toLocaleString()}` : <span className="rw-fieldnote">฿0 · ยังไม่ได้ใส่ · No amount</span>}</div>
+                    </div>
+                  ))}
                 </div>
               </section>
-              <div className="review-agents">
-                <div className="review-agents-label">ตรวจสอบหลักฐาน 4 ขั้นตอน<span className="h2-en">Your AI analysis includes</span></div>
-                {[
-                  { n: '01', l: 'เปรียบเทียบภาพ · Photo comparison', c: 'var(--blue)' },
-                  { n: '02', l: 'ตรวจสัญญาเช่า · Contract review', c: 'var(--purple)' },
-                  { n: '03', l: 'วิเคราะห์กฎหมาย · Legal assessment', c: 'var(--green)' },
-                  { n: '04', l: 'จัดทำเอกสาร · Thai PDF documents', c: 'var(--amber-dark)' },
-                ].map(a => (
-                  <div key={a.n} className="review-agent-row">
-                    <div className="review-agent-num" style={{ background: a.c }}>{a.n}</div>
-                    <span>{a.l}</span>
-                  </div>
-                ))}
-              </div>
+              <section className="rw-group" aria-labelledby="g-review-evidence">
+                <h2 id="g-review-evidence" className="rw-gt"><span>หลักฐาน <span lang="en">· Evidence</span></span></h2>
+                <div className="rw-list">
+                  <div className="rw-row center"><div className="rw-rowmain"><div className="rw-rt">ภาพวันเข้าอยู่ · วันย้ายออก</div><div className="rw-rd">{moveInPrevs.length} · {moveOutPrevs.length} รูป <span lang="en">· move-in · move-out photos</span></div></div>{editButton(1, 'แก้ไขรูปถ่าย · Edit photos')}</div>
+                  <div className="rw-row center"><div className="rw-rowmain"><div className="rw-rt">สัญญาเช่า</div><div className="rw-rd">{hasContract ? 'แนบแล้ว · Added' : 'ไม่ได้แนบ · Not added'}</div></div>{editButton(2, 'แก้ไขหลักฐาน · Edit evidence')}</div>
+                  <div className="rw-row center"><div className="rw-rowmain"><div className="rw-rt">ภาพแชท</div><div className="rw-rd">{screenshotPrevs.length} รูป <span lang="en">· screenshots</span></div></div></div>
+                </div>
+              </section>
+              <section className="rw-group" aria-labelledby="g-review-next">
+                <h2 id="g-review-next" className="rw-gt"><span>สิ่งที่จะเกิดขึ้น <span lang="en">· What happens next</span></span></h2>
+                <ol className="rw-plan rw-list">
+                  {PLAN_PREVIEW.map(p => (
+                    <li key={p.th} className="idle"><StepIdleGlyph /><div><div className="st">{p.th}</div><div className="sd">{p.sd}</div></div></li>
+                  ))}
+                </ol>
+              </section>
+              <Disclaimer />
             </>
           )}
 
-          {error && <div className="error-banner">⚠ {error}</div>}
+          <div className="rw-navrow rw-only-desktop">
+            {step > 0 && <button type="button" className="rw-btn quiet outline" onClick={goBack}>ย้อนกลับ <span lang="en">· Back</span></button>}
+            {nextButton}
           </div>
-          <aside className="case-brief" aria-label="Case summary">
-            <div className="brief-heading"><ScaleIcon size={22} /><span>แฟ้มข้อพิพาทของคุณ<small>Your case file</small></span></div>
-            <div className="brief-total"><span>ยอดหักเงิน · Deductions</span><strong>฿{totalCharged.toLocaleString()}</strong></div>
-            <dl className="brief-evidence">
-              <div><dt>รายการหักเงิน<small>Claims</small></dt><dd>{validClaims.length}</dd></div>
-              <div><dt>ภาพเมื่อเข้าอยู่<small>Move-in photos</small></dt><dd>{moveInPrevs.length}</dd></div>
-              <div><dt>ภาพเมื่อย้ายออก<small>Move-out photos</small></dt><dd>{moveOutPrevs.length}</dd></div>
-              <div><dt>สัญญาเช่า<small>Rental contract</small></dt><dd>{contractFile || contractClause.trim() ? '✓' : '—'}</dd></div>
-              <div><dt>ภาพแชท<small>Chat screenshots</small></dt><dd>{screenshotPrevs.length}</dd></div>
-            </dl>
-            <div className="brief-guidance">
-              <strong>{['เริ่มจากรายการที่ถูกหัก', 'เห็นความเปลี่ยนแปลงชัดขึ้น', 'ทุกข้อตกลงเป็นหลักฐานได้', 'ตรวจสอบก่อนดำเนินการ'][step]}</strong>
-              <p>{[
-                'กรอกแต่ละรายการตามที่เจ้าของบ้านแจ้ง พร้อมยอดเงินที่เรียกเก็บ',
-                'ใช้ภาพมุมเดียวกันก่อนและหลังเช่า หากไม่มีภาพ สามารถข้ามขั้นตอนนี้ได้',
-                'แนบสัญญาหรือข้อความที่เกี่ยวข้อง หากไม่มี สามารถดำเนินการต่อได้',
-                'ตรวจสอบยอดเงิน รายการ และหลักฐาน คุณสามารถย้อนกลับไปแก้ไขได้',
-              ][step]}</p>
-              <small>{[
-                'Use the deduction list provided by your landlord, with the amount for each item.',
-                'Matching camera angles help comparison. You can continue without photos.',
-                'Add relevant lease terms or messages. Supporting evidence is optional.',
-                'Check the amounts and evidence. You can edit each section before analysis.',
-              ][step]}</small>
-            </div>
-            <div className="brief-price">วิเคราะห์และจัดทำเอกสาร <b>ฟรี</b><small>Analysis & documents · Free</small></div>
-          </aside>
         </main>
 
-        <div className="wiz-footer">
-          <div className="wiz-footer-row">
-            {step > 0 && <button className="btn-secondary" onClick={goBack}>ย้อนกลับ · Back</button>}
-            {step < 3 ? (
-              <button className="wiz-btn-next" onClick={goNext}>ถัดไป · Continue →</button>
-            ) : (
-              <button className="wiz-btn-next" onClick={requestAnalysis} disabled={running}>
-                {running ? <><span className="spinner-btn" />กำลังวิเคราะห์ · Analyzing… {elapsed}s</> : 'ดำเนินการวิเคราะห์ · Continue to analysis →'}
-              </button>
-            )}
-          </div>
-        </div>
+        <aside className="rw-aside rw-only-desktop" aria-label="ความคืบหน้า · Progress">
+          {stepper(true)}
+          <p className="rw-note">ยอดหักรวม · Total deducted<b>฿{totalCharged.toLocaleString()}</b></p>
+        </aside>
       </div>
 
-      {showPipeline && (
-        <>
-        <header className="analysis-header"><div className="header-inner">
-          <Link href="/" className="analysis-brand">RoomWitness</Link>
-          <div className="analysis-toolbar">
-            {running ? <span className="analysis-live"><span />กำลังวิเคราะห์ · {elapsed}s</span> : <button className="btn-secondary" onClick={() => setShowPipeline(false)}>กลับไปตรวจสอบ · Back to review</button>}
-          </div>
-        </div></header>
-        {error && <div className="analysis-error error-banner" role="alert">{error}</div>}
-        <Pipeline
-          steps={steps}
-          results={results}
-          moveInPreviews={moveInPrevs}
-          moveOutPreviews={moveOutPrevs}
-          depositAmount={depositAmount}
-          awaitingDocApproval={awaitingDocApproval}
-          generatingDocs={generatingDocs}
-          onApproveDocs={approveDocs}
-        />
-        </>
-      )}
-    </>
+      <div className="rw-actionbar rw-only-mobile">
+        {step > 0 && (
+          <button type="button" className="rw-btn icon quiet-ink flip" aria-label="ย้อนกลับ · Back" onClick={goBack}><ChevronGlyph size={20} /></button>
+        )}
+        {step < 3 && <div className="rw-sum">ยอดหักรวม · Total<b>฿{totalCharged.toLocaleString()}</b></div>}
+        <div className={step < 3 ? 'rw-barbtn' : 'rw-barbtn grow'}>{nextButton}</div>
+      </div>
+    </div>
   );
 }
