@@ -8,6 +8,7 @@ import Pipeline from '@/components/Pipeline';
 import { Disclaimer } from '@/components/Disclaimer';
 import { Claim, PipelineResults, StepState } from '@/types';
 import { getMoveInRecords, dataUrlToFile, MoveInRecord } from '@/lib/moveInVault';
+import { BuildingType, DEFAULT_UNITS, DORM_NOTE, ROLES, ROLE_COPY, Role, isLandlordSide, parseRole, roleHref } from '@/lib/roles';
 import { ChevronGlyph, CloseGlyph, DocGlyph, InfoGlyph, LockGlyph, PlusGlyph, StepFailGlyph, StepIdleGlyph } from '@/components/icons';
 
 type ExtractState = 'idle' | 'extracting' | 'done' | 'failed';
@@ -37,7 +38,24 @@ const PLAN_PREVIEW = [
   { th: 'จัดทำเอกสาร',        sd: 'เอกสารภาษาไทย · Thai PDFs' },
 ];
 
-export default function AppPage() {
+// Landlord and property-business wording: same steps, seen from the side that deducts.
+const OWNER_WIZ_STEPS = [
+  { headline: 'คุณจะหักค่าอะไรบ้าง?',          sub: 'List each deduction you plan to make. We check it before your tenant does.', th: 'รายการหัก', en: 'Deductions' },
+  { headline: 'เปรียบเทียบภาพห้องก่อนและหลังเช่า', sub: 'Move-in and move-out photos of the unit. Your strongest proof.',          th: 'ภาพถ่าย',   en: 'Photos' },
+  { headline: 'เพิ่มสัญญาและข้อมูลห้อง',        sub: 'The lease, the unit and any messages. Optional.',                         th: 'หลักฐาน',   en: 'Evidence' },
+  { headline: 'ตรวจสอบก่อนเริ่มวิเคราะห์',       sub: 'Check the deductions before the analysis starts.',                       th: 'ตรวจสอบ',   en: 'Review' },
+];
+const OWNER_PLAN_PREVIEW = [
+  ...PLAN_PREVIEW.slice(0, 3),
+  { th: 'ยืนยันโดยคุณ',      sd: 'คุณเลือกรายการก่อนออกใบแจ้ง · You choose what to keep first' },
+  { th: 'ออกใบแจ้งรายการหัก', sd: 'ใบแจ้งหักเงินประกันพร้อมข้อกฎหมาย · A law-cited deduction statement' },
+];
+
+export default function AppPage({ searchParams }: { searchParams?: { role?: string | string[] } }) {
+  // ── Who is using it (?role=landlord|business; no query = tenant) ──
+  const [role, setRole] = useState<Role>(() => parseRole(searchParams?.role));
+  const owner = isLandlordSide(role);
+
   // ── Form state ──────────────────────────────────────────────────
   const [moveInFiles,  setMoveInFiles]  = useState<File[]>([]);
   const [moveOutFiles, setMoveOutFiles] = useState<File[]>([]);
@@ -54,7 +72,10 @@ export default function AppPage() {
   const [leaseEnd,        setLeaseEnd]        = useState('');
   const [depositAmount,   setDepositAmount]   = useState('');
   const [monthlyRent,     setMonthlyRent]     = useState('');
-  const [unitCount,       setUnitCount]       = useState('0');
+  const [unitCount,       setUnitCount]       = useState(() => DEFAULT_UNITS[role]);
+  // Owner-side only: shown on the deduction statement, never sent to the agents.
+  const [unitLabel,       setUnitLabel]       = useState('');
+  const [buildingType,    setBuildingType]    = useState<BuildingType>('apartment');
   const [screenshots,     setScreenshots]     = useState<File[]>([]);
   const [screenshotPrevs, setScreenshotPrevs] = useState<string[]>([]);
   const [landlordPromises, setLandlordPromises] = useState('');
@@ -81,9 +102,18 @@ export default function AppPage() {
   const [awaitingDocApproval, setAwaitingDocApproval] = useState(false);
   const [pendingDocArgs, setPendingDocArgs] = useState<{ claims: Claim[]; d3: any } | null>(null);
   const [generatingDocs, setGeneratingDocs] = useState(false);
+  // Owners approve a deduction statement built from the verdicts instead of Agent 04's
+  // tenant filings, so their approval is local state rather than a document request.
+  const [statementApproved, setStatementApproved] = useState(false);
 
   // ── Wizard step ─────────────────────────────────────────────────
   const [step, setStep] = useState(0);
+
+  const changeRole = (r: Role) => {
+    setRole(r);
+    setUnitCount(DEFAULT_UNITS[r]);
+    window.history.replaceState(null, '', roleHref(r));
+  };
 
   // ── Move-in vault (saved earlier) ──
   const [moveInRecords, setMoveInRecords] = useState<MoveInRecord[]>([]);
@@ -263,6 +293,7 @@ export default function AppPage() {
     setAwaitingDocApproval(false);
     setPendingDocArgs(null);
     setGeneratingDocs(false);
+    setStatementApproved(false);
     setSteps(prev => prev.map((s, idx) => (idx >= start || idx === 3) ? 'idle' : s));
     setResults(prev => start === 0 ? {} : start === 1 ? { agent01: prev.agent01 } : { agent01: prev.agent01, agent02: prev.agent02 });
     if (start <= 1) setAgent02Skipped(false);
@@ -355,6 +386,14 @@ export default function AppPage() {
 
   const approveDocs = async () => {
     if (!pendingDocArgs) return;
+    // Agent 04 drafts documents a tenant files against a landlord; an owner's approval
+    // issues their deduction statement instead, which Pipeline builds from the verdicts.
+    if (owner) {
+      setStepState(3, 'done');
+      setAwaitingDocApproval(false);
+      setStatementApproved(true);
+      return;
+    }
     const { claims: validClaims, d3 } = pendingDocArgs;
     // The approval section stays mounted (showing "Creating…") until agent 04 succeeds.
     setGeneratingDocs(true);
@@ -393,8 +432,10 @@ export default function AppPage() {
 
   const selectedRecord = selectedRecordId ? moveInRecords.find(r => r.id === selectedRecordId) : undefined;
   const totalCharged = claims.reduce((s, c) => s + (c.amount_thb || 0), 0);
-  const s = WIZ_STEPS[step];
+  const wizSteps = owner ? OWNER_WIZ_STEPS : WIZ_STEPS;
+  const s = wizSteps[step];
   const hasContract = !!contractFile || !!contractClause.trim();
+  const isDorm = role === 'business' && buildingType === 'dorm';
 
   if (showPipeline) {
     return (
@@ -415,13 +456,18 @@ export default function AppPage() {
         onSkip={skipAgent02}
         onReplaceFile={replaceContractFile}
         onEditCase={() => setShowPipeline(false)}
+        role={role}
+        statementApproved={statementApproved}
+        deposit={parseFloat(depositAmount) || 0}
+        unitLabel={unitLabel}
+        buildingType={role === 'business' ? buildingType : undefined}
       />
     );
   }
 
   const stepper = (rail: boolean) => (
     <ol className={`rw-steps ${rail ? '' : 'rw-only-mobile'}`} aria-label="ขั้นตอน · Steps">
-      {WIZ_STEPS.map((w, i) => (
+      {wizSteps.map((w, i) => (
         <li key={i} className={i < step ? 'done' : i === step ? 'now' : undefined} aria-current={i === step ? 'step' : undefined}>
           <span>
             {w.th}{rail && <span className="rw-railsub" lang="en">· {w.en}</span>}
@@ -463,6 +509,19 @@ export default function AppPage() {
           {/* ── Step 0: Deductions ─────────────────────── */}
           {step === 0 && (
             <>
+              <section className="rw-group" aria-labelledby="g-role" data-testid="role-picker">
+                <h2 id="g-role" className="rw-gt"><span>คุณคือ <span lang="en">· You are</span></span></h2>
+                <div className="rw-list pad">
+                  <div className="rw-chips" role="group" aria-labelledby="g-role">
+                    {ROLES.map(r => (
+                      <button key={r} type="button" className="rw-chip" data-testid={`role-${r}`} aria-pressed={role === r} onClick={() => changeRole(r)}>
+                        {ROLE_COPY[r].th} <span lang="en">· {ROLE_COPY[r].en}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="rw-rd">{ROLE_COPY[role].blurbTh} <span lang="en">· {ROLE_COPY[role].blurbEn}</span></p>
+                </div>
+              </section>
               <ClaimsList claims={claims} onChange={onClaimsChange} itemError={claimsError} firstItemRef={firstItemRef} />
               <p className="rw-short">
                 <LockGlyph />
@@ -553,7 +612,11 @@ export default function AppPage() {
                   </div>
                 </div>
               </section>
-              <p className="rw-short"><InfoGlyph /><span>ใช้ภาพมุมเดียวกันก่อนและหลังเช่า หากไม่มีภาพ ข้ามขั้นตอนนี้ได้ <span lang="en">· Matching angles help. You can continue without photos.</span></span></p>
+              {owner ? (
+                <p className="rw-short"><InfoGlyph /><span>ภาพวันเข้าอยู่ที่ลงวันที่ชัดเจนคือหลักฐานที่ดีที่สุดของคุณ ใช้มุมเดียวกันก่อนและหลังเช่า <span lang="en">· Dated move-in photos are your strongest proof. Matching angles help.</span></span></p>
+              ) : (
+                <p className="rw-short"><InfoGlyph /><span>ใช้ภาพมุมเดียวกันก่อนและหลังเช่า หากไม่มีภาพ ข้ามขั้นตอนนี้ได้ <span lang="en">· Matching angles help. You can continue without photos.</span></span></p>
+              )}
             </>
           )}
 
@@ -601,16 +664,46 @@ export default function AppPage() {
                   <div className="rw-fieldrow even">
                     <div className="rw-field"><label className="rw-label" htmlFor="lease-start">วันเริ่มสัญญา <span lang="en">· Lease start</span></label><input id="lease-start" className="rw-input" data-testid="lease-start" type="date" value={leaseStart} onChange={e => setLeaseStart(e.target.value)} /></div>
                     <div className="rw-field"><label className="rw-label" htmlFor="lease-end">วันสิ้นสุดสัญญา <span lang="en">· Lease end</span></label><input id="lease-end" className="rw-input" data-testid="lease-end" type="date" value={leaseEnd} onChange={e => setLeaseEnd(e.target.value)} /></div>
-                    <div className="rw-field"><label className="rw-label" htmlFor="deposit">เงินประกัน <span lang="en">· Deposit paid</span></label><div className="rw-prefix"><span aria-hidden="true">฿</span><input id="deposit" className="rw-input" data-testid="deposit" type="number" inputMode="numeric" min="0" placeholder="20000" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} /></div></div>
+                    <div className="rw-field"><label className="rw-label" htmlFor="deposit">{owner ? <>เงินประกันที่ถือไว้ <span lang="en">· Deposit held</span></> : <>เงินประกัน <span lang="en">· Deposit paid</span></>}</label><div className="rw-prefix"><span aria-hidden="true">฿</span><input id="deposit" className="rw-input" data-testid="deposit" type="number" inputMode="numeric" min="0" placeholder="20000" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} /></div></div>
                     <div className="rw-field"><label className="rw-label" htmlFor="rent">ค่าเช่าต่อเดือน <span lang="en">· Monthly rent</span></label><div className="rw-prefix"><span aria-hidden="true">฿</span><input id="rent" className="rw-input" data-testid="rent" type="number" inputMode="numeric" min="0" placeholder="10000" value={monthlyRent} onChange={e => setMonthlyRent(e.target.value)} /></div></div>
                     <div className="rw-field">
-                      <label className="rw-label" htmlFor="units">จำนวนห้องที่ผู้ให้เช่าปล่อยเช่า <span lang="en">· Landlord&apos;s rental units</span></label>
+                      <label className="rw-label" htmlFor="units">
+                        {owner ? <>จำนวนห้องที่คุณปล่อยเช่า <span lang="en">· Units you rent out</span></> : <>จำนวนห้องที่ผู้ให้เช่าปล่อยเช่า <span lang="en">· Landlord&apos;s rental units</span></>}
+                      </label>
                       <input id="units" className="rw-input" data-testid="units" type="number" inputMode="numeric" min="0" placeholder="5" aria-describedby="units-note" value={unitCount} onChange={e => setUnitCount(e.target.value)} />
-                      <p id="units-note" className="rw-fieldnote">ไม่ทราบให้ใส่ 0 <span lang="en">· Enter 0 if you don&apos;t know</span></p>
+                      {owner ? (
+                        <p id="units-note" className="rw-fieldnote">3 ห้องขึ้นไป ประกาศ สคบ. 2568 ใช้บังคับ <span lang="en">· At 3 or more units, the OCPB 2568 notification applies</span></p>
+                      ) : (
+                        <p id="units-note" className="rw-fieldnote">ไม่ทราบให้ใส่ 0 <span lang="en">· Enter 0 if you don&apos;t know</span></p>
+                      )}
                     </div>
+                    {owner && (
+                      <div className="rw-field">
+                        <label className="rw-label" htmlFor="unit-label">ห้อง / ยูนิต <span lang="en">· Room or unit</span></label>
+                        <input id="unit-label" className="rw-input" data-testid="unit-label" type="text" placeholder="เช่น 504 · e.g. 504" aria-describedby="unit-label-note" value={unitLabel} onChange={e => setUnitLabel(e.target.value)} />
+                        <p id="unit-label-note" className="rw-fieldnote">แสดงบนใบแจ้งเท่านั้น <span lang="en">· Shown on the statement only</span></p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </section>
+
+              {role === 'business' && (
+                <section className="rw-group" aria-labelledby="g-building">
+                  <h2 id="g-building" className="rw-gt"><span>ประเภทอาคาร <span lang="en">· Building type</span></span></h2>
+                  <div className="rw-list pad">
+                    <div className="rw-chips" role="group" aria-labelledby="g-building">
+                      <button type="button" className="rw-chip" data-testid="building-apartment" aria-pressed={buildingType === 'apartment'} onClick={() => setBuildingType('apartment')}>
+                        อพาร์ตเมนต์ / คอนโด <span lang="en">· Apartment or condo</span>
+                      </button>
+                      <button type="button" className="rw-chip" data-testid="building-dorm" aria-pressed={buildingType === 'dorm'} onClick={() => setBuildingType('dorm')}>
+                        หอพักที่มีใบอนุญาต <span lang="en">· Licensed dormitory</span>
+                      </button>
+                    </div>
+                    {isDorm && <p className="rw-short" role="note" data-testid="dorm-note"><InfoGlyph /><span>{DORM_NOTE.th} <span lang="en">· {DORM_NOTE.en}</span></span></p>}
+                  </div>
+                </section>
+              )}
 
               <section className="rw-group" aria-labelledby="g-chats">
                 <h2 id="g-chats" className="rw-gt"><span>ภาพแชท <span lang="en">· Chat screenshots (LINE, WhatsApp, SMS)</span></span></h2>
@@ -635,12 +728,18 @@ export default function AppPage() {
                 <h2 id="g-promises" className="rw-gt"><span>ข้อตกลงเป็นลายลักษณ์อักษร <span lang="en">· Written promises</span></span></h2>
                 <div className="rw-fields">
                   <div className="rw-field">
-                    <label className="rw-label" htmlFor="landlord-promises">เจ้าของบ้านตกลงไว้ <span lang="en">· Landlord promises</span></label>
+                    <label className="rw-label" htmlFor="landlord-promises">
+                      {owner ? <>คุณตกลงไว้กับผู้เช่า <span lang="en">· Your promises</span></> : <>เจ้าของบ้านตกลงไว้ <span lang="en">· Landlord promises</span></>}
+                    </label>
                     <textarea id="landlord-promises" className="rw-input" rows={3} placeholder="เช่น คืนเงินเต็มจำนวนถ้าห้องสะอาด · e.g. Full refund if the room is clean" value={landlordPromises} onChange={e => setLandlordPromises(e.target.value)} />
                   </div>
                   <div className="rw-field">
-                    <label className="rw-label" htmlFor="tenant-promises">คุณได้แจ้งหรือตกลงไว้ <span lang="en">· Your statements</span></label>
-                    <textarea id="tenant-promises" className="rw-input" rows={3} placeholder="เช่น รอยบนผนังมีอยู่ก่อนเข้าอยู่ · e.g. The wall scuff was there at move-in" value={tenantPromises} onChange={e => setTenantPromises(e.target.value)} />
+                    <label className="rw-label" htmlFor="tenant-promises">
+                      {owner ? <>ผู้เช่าแจ้งหรือตกลงไว้ <span lang="en">· Tenant&apos;s statements</span></> : <>คุณได้แจ้งหรือตกลงไว้ <span lang="en">· Your statements</span></>}
+                    </label>
+                    <textarea id="tenant-promises" className="rw-input" rows={3}
+                      placeholder={owner ? 'เช่น จะทาสีผนังเองก่อนย้ายออก · e.g. Will repaint the wall before moving out' : 'เช่น รอยบนผนังมีอยู่ก่อนเข้าอยู่ · e.g. The wall scuff was there at move-in'}
+                      value={tenantPromises} onChange={e => setTenantPromises(e.target.value)} />
                   </div>
                 </div>
               </section>
@@ -668,6 +767,13 @@ export default function AppPage() {
               <section className="rw-group" aria-labelledby="g-review-evidence">
                 <h2 id="g-review-evidence" className="rw-gt"><span>หลักฐาน <span lang="en">· Evidence</span></span></h2>
                 <div className="rw-list">
+                  <div className="rw-row center" data-testid="review-role">
+                    <div className="rw-rowmain">
+                      <div className="rw-rt">คุณคือ{ROLE_COPY[role].th}</div>
+                      <div className="rw-rd" lang="en">You are: {ROLE_COPY[role].en}{owner && unitLabel.trim() ? ` · Unit ${unitLabel.trim()}` : ''}</div>
+                    </div>
+                    {editButton(0, 'แก้ไขบทบาท · Edit role')}
+                  </div>
                   <div className="rw-row center"><div className="rw-rowmain"><div className="rw-rt">ภาพวันเข้าอยู่ · วันย้ายออก</div><div className="rw-rd">{moveInPrevs.length} · {moveOutPrevs.length} รูป <span lang="en">· move-in · move-out photos</span></div></div>{editButton(1, 'แก้ไขรูปถ่าย · Edit photos')}</div>
                   <div className="rw-row center"><div className="rw-rowmain"><div className="rw-rt">สัญญาเช่า</div><div className="rw-rd">{hasContract ? 'แนบแล้ว · Added' : 'ไม่ได้แนบ · Not added'}</div></div>{editButton(2, 'แก้ไขหลักฐาน · Edit evidence')}</div>
                   <div className="rw-row center"><div className="rw-rowmain"><div className="rw-rt">ภาพแชท</div><div className="rw-rd">{screenshotPrevs.length} รูป <span lang="en">· screenshots</span></div></div></div>
@@ -676,11 +782,12 @@ export default function AppPage() {
               <section className="rw-group" aria-labelledby="g-review-next">
                 <h2 id="g-review-next" className="rw-gt"><span>สิ่งที่จะเกิดขึ้น <span lang="en">· What happens next</span></span></h2>
                 <ol className="rw-plan rw-list">
-                  {PLAN_PREVIEW.map(p => (
+                  {(owner ? OWNER_PLAN_PREVIEW : PLAN_PREVIEW).map(p => (
                     <li key={p.th} className="idle"><StepIdleGlyph /><div><div className="st">{p.th}</div><div className="sd">{p.sd}</div></div></li>
                   ))}
                 </ol>
               </section>
+              {isDorm && <p className="rw-short" role="note"><InfoGlyph /><span>{DORM_NOTE.th} <span lang="en">· {DORM_NOTE.en}</span></span></p>}
               <Disclaimer />
             </>
           )}

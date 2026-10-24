@@ -5,10 +5,15 @@ import Link from 'next/link';
 import { Claim, ClaimVerdict, PipelineResults, StepState } from '@/types';
 import { Disclaimer, ShortDisclaimer } from '@/components/Disclaimer';
 import DocPreview from '@/components/DocPreview';
+import { VerdictBadge } from '@/components/VerdictBadge';
+import { DeductionStatement, KeepToggle, OWNER_NEXT, OwnerBeforeSend, OwnerHeadline, isKept } from '@/components/LandlordResults';
+import { BuildingType, DORM_NOTE, Role, isLandlordSide } from '@/lib/roles';
 import {
-  ChevronGlyph, DisputedGlyph, DocGlyph, DownloadGlyph, LawfulGlyph, StepDoneGlyph, StepFailGlyph,
-  StepIdleGlyph, StepNowGlyph, StepSkipGlyph, UnlawfulGlyph,
+  ChevronGlyph, DocGlyph, DownloadGlyph, StepDoneGlyph, StepFailGlyph,
+  StepIdleGlyph, StepNowGlyph, StepSkipGlyph,
 } from '@/components/icons';
+
+export { VerdictBadge };
 
 // Thai primary, English secondary
 const CV_LABEL: Record<string, { th: string; en: string }> = {
@@ -17,13 +22,6 @@ const CV_LABEL: Record<string, { th: string; en: string }> = {
   UNCHANGED:    { th: 'ไม่เปลี่ยนแปลง',     en: 'No change' },
   NEW_DAMAGE:   { th: 'ความเสียหายใหม่',    en: 'New damage' },
 };
-// Owner decision: the Unlawful badge matches the headline wording.
-const VERDICT_LABEL: Record<string, { th: string; en: string; cls: string }> = {
-  LAWFUL:   { th: 'ถูกต้อง',          en: 'Lawful',   cls: 'law' },
-  DISPUTED: { th: 'โต้แย้ง',          en: 'Disputed', cls: 'dis' },
-  UNLAWFUL: { th: 'ไม่ชอบด้วยกฎหมาย', en: 'Unlawful', cls: 'unl' },
-};
-
 export const DOC_TYPES: Record<string, { th: string; en: string }> = {
   demand_letter:    { th: 'หนังสือเรียกร้องคืนเงินประกัน', en: 'Demand letter' },
   evidence_summary: { th: 'สรุปหลักฐานและผลวินิจฉัย',     en: 'Evidence summary' },
@@ -50,16 +48,11 @@ const STEP_ERRORS = [
 
 const baht = (n: number | null | undefined) => `฿${(n ?? 0).toLocaleString()}`;
 
-export function VerdictBadge({ verdict }: { verdict: string }) {
-  const v = VERDICT_LABEL[verdict];
-  if (!v) return <span className="rw-badge neutral">{verdict || '—'}</span>;
-  const Glyph = verdict === 'UNLAWFUL' ? UnlawfulGlyph : verdict === 'DISPUTED' ? DisputedGlyph : LawfulGlyph;
-  return (
-    <span className={`rw-badge ${v.cls}`}>
-      <Glyph size={14} /><span>{v.th} <span className="en" lang="en">· {v.en}</span></span>
-    </span>
-  );
-}
+// Legal regime line shown to owners at approval (the tenant ROUTE_LABEL wording is about filing).
+const OWNER_REGIME: Record<string, { th: string; en: string }> = {
+  OCPB:  { th: 'ใช้ ป.พ.พ. และประกาศ สคบ. 2568 (3 ห้องขึ้นไป)', en: 'The Civil Code and the OCPB 2568 notification apply (3 or more units).' },
+  CIVIL: { th: 'ใช้ ป.พ.พ. (ประกาศ สคบ. ใช้กับ 3 ห้องขึ้นไป)',   en: 'The Civil Code applies; the OCPB notification covers 3 or more units.' },
+};
 
 // ── Error panel shown inside the step that failed ──────────────────────
 interface StepErrorProps {
@@ -162,12 +155,23 @@ interface Props {
   onSkip: () => void;
   onReplaceFile: (f: File) => void;
   onEditCase: () => void;
+  // Landlord and property-business runs: same agents, owner framing, a statement instead of Agent 04.
+  role?: Role;
+  statementApproved?: boolean;
+  deposit?: number;
+  unitLabel?: string;
+  buildingType?: BuildingType;
 }
 
 export default function Pipeline({
   steps, results, claims, moveInPreviews, moveOutPreviews, hasContract, agent02Skipped, errorDetail, running,
   awaitingDocApproval, generatingDocs, onApproveDocs, onRetry, onSkip, onReplaceFile, onEditCase,
+  role = 'tenant', statementApproved = false, deposit = 0, unitLabel = '', buildingType,
 }: Props) {
+  const owner = isLandlordSide(role);
+  // Which verdicts the owner keeps on the statement; unset ids fall back to isKept's default.
+  const [keep, setKeep] = useState<Record<string, boolean>>({});
+  const setKept = (claimId: string, on: boolean) => setKeep(prev => ({ ...prev, [claimId]: on }));
   const [s1, s2, s3, s4] = steps;
   const d1 = results.agent01;
   const d2 = results.agent02;
@@ -180,7 +184,8 @@ export default function Pipeline({
   const generatedDocs = d4 ? requestedDocs.filter(k => d4.documents?.[k]) : [];
   const missingDocs = d4 ? requestedDocs.filter(k => !d4.documents?.[k]) : [];
   const route = d3?.routing ? ROUTE_LABEL[d3.routing] : undefined;
-  const docsReady = !!d4?.case_id;
+  const docsReady = owner ? statementApproved : !!d4?.case_id;
+  const keptVerdicts = verdicts.filter(v => isKept(v, keep));
   const showApproval = !!d3 && (!!awaitingDocApproval || s4 === 'error' || (!!generatingDocs && !d4));
   const failedStep = [s1, s2, s3].findIndex(s => s === 'error');
   const descFor = (v: ClaimVerdict) => claims.find(c => c.claim_id === v.claim_id)?.description;
@@ -207,12 +212,16 @@ export default function Pipeline({
         : 'ป.พ.พ. และประกาศ สคบ. 2568 · CCC and OCPB 2568',
       slot: s3 === 'error' ? <StepError step={2} detail={errorDetail} onRetry={() => onRetry(2)} busy={running} /> : undefined },
     { key: 4, state: approvalState, st: 'ยืนยันโดยคุณ',
-      sd: approvalState === 'now' ? 'รอการอนุมัติ · Waiting for you' : approvalState === 'done' ? 'อนุมัติแล้ว · Approved' : 'คุณตรวจผลก่อนสร้างเอกสาร · You approve first' },
-    { key: 5, state: toPlan(s4), st: 'จัดทำเอกสาร',
-      sd: s4 === 'active' ? `กำลังจัดทำเอกสาร ${requestedDocs.length} ฉบับ · Drafting ${requestedDocs.length} Thai documents`
-        : s4 === 'done' ? `พร้อมดาวน์โหลด ${generatedDocs.length} ฉบับ · ${generatedDocs.length} ready`
-        : s4 === 'error' ? 'ไม่สำเร็จ ลองอีกครั้งได้ในกล่องอนุมัติ · Failed; retry from the approval box'
-        : 'เอกสารภาษาไทย · Thai PDFs' },
+      sd: approvalState === 'now' ? 'รอการอนุมัติ · Waiting for you' : approvalState === 'done' ? 'อนุมัติแล้ว · Approved'
+        : owner ? 'คุณเลือกรายการก่อนออกใบแจ้ง · You choose what to keep first' : 'คุณตรวจผลก่อนสร้างเอกสาร · You approve first' },
+    owner
+      ? { key: 5, state: toPlan(s4), st: 'ออกใบแจ้งรายการหัก',
+          sd: s4 === 'done' ? 'ใบแจ้งพร้อมพิมพ์ · Statement ready to print' : 'ใบแจ้งหักเงินประกัน · Deduction statement' }
+      : { key: 5, state: toPlan(s4), st: 'จัดทำเอกสาร',
+          sd: s4 === 'active' ? `กำลังจัดทำเอกสาร ${requestedDocs.length} ฉบับ · Drafting ${requestedDocs.length} Thai documents`
+            : s4 === 'done' ? `พร้อมดาวน์โหลด ${generatedDocs.length} ฉบับ · ${generatedDocs.length} ready`
+            : s4 === 'error' ? 'ไม่สำเร็จ ลองอีกครั้งได้ในกล่องอนุมัติ · Failed; retry from the approval box'
+            : 'เอกสารภาษาไทย · Thai PDFs' },
   ];
   const currentIdx = plan.findIndex(p => p.state !== 'done' && p.state !== 'skipped');
   const stepNo = currentIdx === -1 ? 5 : currentIdx + 1;
@@ -222,11 +231,15 @@ export default function Pipeline({
   const heading = {
     running: { h1: 'กำลังตรวจสอบหลักฐานของคุณ', sub: <span lang="en">Checking your evidence, one step at a time.</span> },
     error:   { h1: STEP_ERRORS[Math.max(failedStep, 0)].h1, sub: <>รายการและภาพของคุณยังอยู่ครบ <span lang="en">· Your claims and photos are kept.</span></> },
-    review:  { h1: 'ผลวินิจฉัยพร้อมให้คุณตรวจ', sub: <>ยังไม่มีการสร้างเอกสารจนกว่าคุณจะอนุมัติ <span lang="en">· Nothing is created until you approve.</span></> },
-    docs:    { h1: 'เอกสารของคุณพร้อมแล้ว', sub: <span lang="en">Your {generatedDocs.length} Thai documents are ready to download.</span> },
+    review:  owner
+      ? { h1: 'ผลตรวจพร้อมให้คุณเลือก', sub: <>ยังไม่มีการออกใบแจ้งจนกว่าคุณจะอนุมัติ <span lang="en">· Nothing is issued until you approve.</span></> }
+      : { h1: 'ผลวินิจฉัยพร้อมให้คุณตรวจ', sub: <>ยังไม่มีการสร้างเอกสารจนกว่าคุณจะอนุมัติ <span lang="en">· Nothing is created until you approve.</span></> },
+    docs:    owner
+      ? { h1: 'ใบแจ้งรายการหักพร้อมแล้ว', sub: <span lang="en">Your deduction statement is ready to print or save as PDF.</span> }
+      : { h1: 'เอกสารของคุณพร้อมแล้ว', sub: <span lang="en">Your {generatedDocs.length} Thai documents are ready to download.</span> },
   }[mode];
   const status = mode === 'error' ? 'หยุดชั่วคราว · Paused'
-    : mode === 'docs' ? `เคส · Case ${d4!.case_id}`
+    : mode === 'docs' ? (owner ? 'ใบแจ้งพร้อมแล้ว · Statement ready' : `เคส · Case ${d4!.case_id}`)
     : `ขั้น ${stepNo} จาก 5 · Step ${stepNo} of 5`;
 
   // The generated document open in the in-page viewer, if any.
@@ -279,7 +292,14 @@ export default function Pipeline({
                 {v.citations.map((c, j) => <span key={j} className="rw-cite">{c}</span>)}
               </div>
             )}
-            {v.recommended_action_th && <p className="rw-next"><b>ขั้นต่อไป · Next step:</b> {v.recommended_action_th}</p>}
+            {owner ? (
+              <>
+                {OWNER_NEXT[v.verdict] && <p className="rw-next"><b>ขั้นต่อไป · Next step:</b> {OWNER_NEXT[v.verdict].th} <span lang="en">· {OWNER_NEXT[v.verdict].en}</span></p>}
+                <KeepToggle v={v} keep={keep} onChange={setKept} />
+              </>
+            ) : (
+              v.recommended_action_th && <p className="rw-next"><b>ขั้นต่อไป · Next step:</b> {v.recommended_action_th}</p>
+            )}
           </div>
         ))}
       </div>
@@ -287,7 +307,31 @@ export default function Pipeline({
     </section>
   );
 
-  const approval = showApproval && d3 && (
+  const regime = d3?.routing ? OWNER_REGIME[d3.routing] : undefined;
+  const ownerApproval = showApproval && d3 && (
+    <section className="rw-group" aria-labelledby="g-approve" data-testid="approval">
+      <h2 id="g-approve" className="rw-gt"><span>อนุมัติเพื่อออกใบแจ้ง <span lang="en">· Approve to issue</span></span></h2>
+      <div className="rw-list pad">
+        <p className="rw-rd ink">
+          เลือกรายการที่จะหักในผลตรวจ แล้วอนุมัติเพื่อออกใบแจ้งรายการหักเงินประกัน{' '}
+          <span lang="en">· Choose what to keep in the results, then approve to issue the deduction statement.</span>
+        </p>
+        <p className="rw-rd ink" data-testid="approval-kept">
+          <b>ในใบแจ้ง · On the statement:</b> {keptVerdicts.length} รายการ · {baht(keptVerdicts.reduce((s, v) => s + (v.amount_thb ?? 0), 0))}{' '}
+          <span lang="en">· {keptVerdicts.length} item{keptVerdicts.length !== 1 ? 's' : ''}</span>
+        </p>
+        {buildingType === 'dorm'
+          ? <p className="rw-rd">{DORM_NOTE.th} <span lang="en">· {DORM_NOTE.en}</span></p>
+          : regime && <p className="rw-rd">{regime.th} <span lang="en">· {regime.en}</span></p>}
+        <Disclaimer />
+        <button type="button" className="rw-btn full wrap" data-testid="approve" onClick={onApproveDocs}>
+          อนุมัติและออกใบแจ้ง <span lang="en">· Approve</span>
+        </button>
+      </div>
+    </section>
+  );
+
+  const approval = owner ? ownerApproval : showApproval && d3 && (
     <section className="rw-group" aria-labelledby="g-approve" data-testid="approval">
       <h2 id="g-approve" className="rw-gt"><span>อนุมัติเพื่อสร้างเอกสาร <span lang="en">· Approve to create</span></span></h2>
       <div className="rw-list pad">
@@ -311,6 +355,11 @@ export default function Pipeline({
         )}
       </div>
     </section>
+  );
+
+  const statement = owner && docsReady && (
+    <DeductionStatement verdicts={verdicts} claims={claims} keep={keep} deposit={deposit} unitLabel={unitLabel}
+      routing={d3?.routing} buildingType={buildingType} />
   );
 
   const docsGroup = docsReady && d4 && (
@@ -374,7 +423,7 @@ export default function Pipeline({
     </section>
   );
 
-  const beforeFiling = docsReady && (
+  const beforeFiling = docsReady && owner ? <OwnerBeforeSend role={role} routing={d3?.routing} buildingType={buildingType} /> : docsReady && (
     <section className="rw-group" aria-labelledby="g-before">
       <h2 id="g-before" className="rw-gt"><span>ก่อนยื่น <span lang="en">· Before you file</span></span></h2>
       <div className="rw-list">
@@ -410,7 +459,7 @@ export default function Pipeline({
       <details className="rw-evidence" data-testid="agent-card">
         <summary><span>สรุปคดี <span lang="en">· Case summary</span></span><ChevronGlyph /></summary>
         <div className="rw-evidence-body">
-          {route && <p className="rw-rd ink"><b>เส้นทางดำเนินการ · Next step:</b> {route.th} <span lang="en">· {route.en}</span></p>}
+          {route && !owner && <p className="rw-rd ink"><b>เส้นทางดำเนินการ · Next step:</b> {route.th} <span lang="en">· {route.en}</span></p>}
           <p>{d3.case_summary_th}</p>
           {d3.case_summary_en && <p className="rw-rd" lang="en">{d3.case_summary_en}</p>}
           {d4 && <p className="rw-note">สร้างเอกสาร {generatedDocs.length} ฉบับใน {d4.generation_time_seconds} วินาที <span lang="en">· {generatedDocs.length} documents in {d4.generation_time_seconds}s</span></p>}
@@ -549,7 +598,9 @@ export default function Pipeline({
         {mode === 'review' && (
           <>
             <main className="rw-main">
-              <Headline verdicts={verdicts} totalUnlawful={totalUnlawful} totalClaimed={totalClaimed} />
+              {owner
+                ? <OwnerHeadline verdicts={verdicts} keep={keep} deposit={deposit} />
+                : <Headline verdicts={verdicts} totalUnlawful={totalUnlawful} totalClaimed={totalClaimed} />}
               {verdictGroup}
               {evidence}
             </main>
@@ -563,13 +614,15 @@ export default function Pipeline({
         {mode === 'docs' && (
           <>
             <main className="rw-main">
-              {docsGroup}
+              {owner ? statement : docsGroup}
               {beforeFiling}
               {verdictGroup}
               {evidence}
             </main>
             <aside className="rw-aside" aria-label="สรุป · Summary">
-              <Headline verdicts={verdicts} totalUnlawful={totalUnlawful} totalClaimed={totalClaimed} compact />
+              {owner
+                ? <OwnerHeadline verdicts={verdicts} keep={keep} deposit={deposit} compact />
+                : <Headline verdicts={verdicts} totalUnlawful={totalUnlawful} totalClaimed={totalClaimed} compact />}
               <Disclaimer />
             </aside>
           </>
