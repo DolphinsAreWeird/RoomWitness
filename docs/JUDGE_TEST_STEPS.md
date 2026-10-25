@@ -29,6 +29,15 @@ Use the fixtures in `data/` at the repo root — no account, no real tenant data
 
 A disclaimer banner and privacy note are visible in the UI at the claims step and throughout the results page (Responsible AI / safety).
 
+## Optional: the landlord side of the same check
+
+The same four agents also serve landlords and property businesses. Only the framing and the final output change; nothing extra runs on AWS.
+
+1. Open the live URL with `?role=landlord` (individual landlord, 1–2 rooms) or `?role=business` (apartments, dorms, property managers, 3+ units), or pick the role at the top of the Claims step.
+2. Repeat steps 2–5 above. On Extras, the rental-units field is pre-filled (1 for a landlord, 3 for a business) and you can add a room number.
+3. On the results, each deduction shows the owner's next step and an **Include in the statement** checkbox: Lawful items start included, Disputed ones are your call, Unlawful ones can't be included.
+4. **Approve** issues a printable **deduction statement** (item, check result, cited law, amount, refund due to the tenant) instead of the tenant's Thai filings. Agent 04 is not called on this path.
+
 ## Fallback if AWS is unavailable
 
 Known risk: NTT shuts down team AWS accounts after the submission deadline. If the live URL above is down when you test:

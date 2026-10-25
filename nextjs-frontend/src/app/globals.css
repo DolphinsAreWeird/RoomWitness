@@ -286,6 +286,62 @@ textarea.rw-input { padding: var(--s2) var(--s3); min-height: 104px; resize: ver
 .rw-index { font-size: 13px; line-height: 1.5; color: var(--ink2); min-width: 22px; padding-top: 2px; }
 .rw-steps3 { display: grid; grid-template-columns: 1fr; gap: var(--group); list-style: none; }
 .rw-steps3 li { background: var(--surface); border-radius: 12px; padding: var(--inset); display: flex; flex-direction: column; gap: var(--s1); }
+.rw-roles { display: grid; grid-template-columns: 1fr; gap: var(--group); list-style: none; }
+.rw-roles li { display: flex; }
+.rw-role { flex: 1; display: flex; flex-direction: column; gap: var(--s1); background: var(--surface); border-radius: 12px; padding: var(--inset);
+  color: var(--ink); text-decoration: none; border: 1px solid transparent; }
+.rw-role:hover { border-color: var(--tint); }
+.rw-role-title { font-size: 18px; font-weight: 600; line-height: 1.5; }
+.rw-role-gets { font-size: 14px; line-height: 1.5; color: var(--ink); margin-top: var(--s2); padding-top: var(--s2); border-top: 1px solid var(--hair); }
+.rw-role-gets b { display: block; font-size: 13px; color: var(--ink2); }
+.rw-role-gets span { color: var(--ink2); }
+.rw-roles + .rw-short { padding: 0 var(--inset); }
+.rw-role-go { display: inline-flex; align-items: center; gap: var(--s1); margin-top: auto; padding-top: var(--s3); font-size: 15px; font-weight: 600; color: var(--tint); }
+
+/* ── owner results: tally, keep toggle, deduction statement ───── */
+.rw-tally { display: flex; flex-direction: column; gap: var(--s1); margin-top: var(--s3); }
+.rw-tally > div { display: flex; justify-content: space-between; gap: var(--s3); font-size: 15px; line-height: 1.5; }
+.rw-tally dt { display: flex; align-items: baseline; gap: var(--s2); color: var(--ink2); min-width: 0; }
+.rw-tally dt i { width: 10px; height: 10px; border-radius: 50%; flex: none; align-self: center; }
+.rw-tally dt i.dis { background: var(--dis); }
+.rw-tally dt i.unl { background: var(--unl); }
+.rw-tally dd { font-weight: 600; white-space: nowrap; }
+.rw-keep { display: flex; flex-direction: column; gap: var(--s1); }
+.rw-check { display: flex; align-items: center; gap: var(--s3); min-height: 44px; font-size: 15px; line-height: 1.5; cursor: pointer; }
+.rw-check input { width: 20px; height: 20px; flex: none; accent-color: var(--tint); }
+.rw-check:has(input:disabled) { cursor: not-allowed; color: var(--ink2); }
+.rw-statement { background: var(--surface); border-radius: 12px; padding: var(--inset); display: flex; flex-direction: column; gap: var(--s4); }
+.rw-stmt-head { display: flex; flex-direction: column; gap: var(--s1); padding-bottom: var(--s3); border-bottom: 2px solid var(--ink); }
+.rw-stmt-head h3 { font-size: 22px; line-height: 1.45; margin-top: var(--s2); }
+.rw-stmt-table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.5; }
+.rw-stmt-table th, .rw-stmt-table td { text-align: left; vertical-align: top; padding: var(--s3) 0; border-bottom: 1px solid var(--hair); }
+.rw-stmt-table thead th { font-size: 13px; font-weight: 600; color: var(--ink2); padding-top: 0; }
+.rw-stmt-table td > div + div { margin-top: 2px; }
+.rw-stmt-table .num { text-align: right; white-space: nowrap; padding-left: var(--s4); font-weight: 600; }
+.rw-stmt-table thead .num { font-weight: 600; }
+.rw-stmt-table tfoot th { font-weight: 400; color: var(--ink2); }
+.rw-stmt-table tfoot tr.due th, .rw-stmt-table tfoot tr.due td { color: var(--ink); font-weight: 600; font-size: 17px; border-bottom: 0; }
+.rw-vtext.law { color: var(--law); }
+.rw-vtext.dis { color: var(--dis); }
+.rw-vtext.unl { color: var(--unl); }
+.rw-stmt-notes { display: flex; flex-direction: column; gap: var(--s2); }
+.rw-sign { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s5); margin-top: var(--s5); font-size: 13px; line-height: 1.5; color: var(--ink2); }
+.rw-sign .line { display: block; height: 40px; border-bottom: 1px solid var(--edge); margin-bottom: var(--s1); }
+
+@media print {
+  /* With a statement on the page, only the statement prints, on plain paper colours. */
+  body:has(#deduction-statement) .rw-shell > :not(.rw-page),
+  body:has(#deduction-statement) .rw-page > :not(.rw-main),
+  body:has(#deduction-statement) .rw-main > :not(#case-documents),
+  body:has(#deduction-statement) #case-documents > :not(#deduction-statement) { display: none !important; }
+  body:has(#deduction-statement), body:has(#deduction-statement) .rw-shell { background: #fff; min-height: 0; }
+  body:has(#deduction-statement) .rw-page { display: block; padding: 0; }
+  #deduction-statement { padding: 0; border-radius: 0; background: #fff; color: #000; }
+  #deduction-statement .rw-rd, #deduction-statement .rw-note, #deduction-statement .disclaimer-short { color: #333; }
+  #deduction-statement .rw-stmt-table tr { break-inside: avoid; }
+  @page { margin: 18mm; }
+}
+
 .rw-footer { border-top: 1px solid var(--hair); padding: var(--s5) var(--gutter); }
 .rw-footer-in { max-width: 1028px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--s1); font-size: 14px; line-height: 1.5; color: var(--ink2); }
 .rw-footer-in b { color: var(--ink); font-family: var(--mark); font-weight: 600; }
@@ -313,6 +369,7 @@ textarea.rw-input { padding: var(--s2) var(--s3); min-height: 104px; resize: ver
   .rw-display { font-size: 44px; }
   .rw-hero { display: grid; grid-template-columns: minmax(0, 1fr) 380px; column-gap: var(--s7); align-items: center; }
   .rw-steps3 { grid-template-columns: repeat(3, 1fr); }
+  .rw-roles { grid-template-columns: repeat(3, 1fr); }
   .rw-footer-in { flex-direction: row; justify-content: space-between; }
 }
 @media (max-width: 899px) {
